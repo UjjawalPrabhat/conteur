@@ -1,0 +1,81 @@
+import Foundation
+
+protocol Diagnosing: Sendable {
+    func diagnose(_ input: DiagnosticInput, against baseline: Baseline) -> Diagnosis
+}
+
+/// Scores every dimension from the rules that fired, then picks the one weakness
+/// worth acting on. Pure and deterministic: the same recording always yields the same
+/// bands and the same focus, which is what makes attempt-to-attempt comparison real.
+struct RuleBasedDiagnosis: Diagnosing {
+    /// A story a listener cannot follow is a bigger problem than one with fillers in
+    /// it, so equal score gaps do not carry equal weight.
+    private static let importance: [Dimension: Double] = [
+        .structure: 1.0,
+        .coherence: 1.0,
+        .relevance: 0.85,
+        .engagement: 0.8,
+        .delivery: 0.6,
+    ]
+
+    private let rules: [any DiagnosticRule]
+
+    init(rules: [any DiagnosticRule] = RuleBasedDiagnosis.standardRules) {
+        self.rules = rules
+    }
+
+    static let standardRules: [any DiagnosticRule] = [
+        MissingComponentsRule(),
+        DroppedThreadRule(),
+        CausalDensityRule(),
+        SequencingRule(),
+        RestartRule(),
+        TimeAllocationRule(),
+        StakesGapRule(),
+        MonotoneRule(),
+        FlatClimaxRule(),
+        FilledPauseRule(),
+        StallRule(),
+        RushedClimaxRule(),
+    ]
+
+    func diagnose(_ input: DiagnosticInput, against baseline: Baseline) -> Diagnosis {
+        guard !input.timeline.transcript.words.isEmpty else { return .empty }
+
+        let findings = rules.flatMap { $0.findings(in: input) }
+        let assessments = Dimension.allCases.map { dimension in
+            assess(dimension, from: findings.filter { $0.dimension == dimension })
+        }
+
+        return Diagnosis(
+            assessments: assessments,
+            focus: focus(among: assessments, against: baseline)
+        )
+    }
+
+    private func assess(_ dimension: Dimension, from findings: [Finding]) -> DimensionAssessment {
+        let deductions = findings.reduce(0) { $0 + $1.weight }
+        let score = max(0, 1 - deductions)
+
+        return DimensionAssessment(
+            dimension: dimension,
+            band: Band(score: score),
+            score: score,
+            findings: findings.sorted { $0.weight > $1.weight }
+        )
+    }
+
+    /// The dimension that has slipped furthest from where this speaker usually sits.
+    /// With no history, that reduces to the weakest dimension by importance.
+    private func focus(among assessments: [DimensionAssessment], against baseline: Baseline) -> DimensionAssessment? {
+        assessments
+            .filter { !$0.findings.isEmpty }
+            .max { lhs, rhs in impact(of: lhs, against: baseline) < impact(of: rhs, against: baseline) }
+    }
+
+    private func impact(of assessment: DimensionAssessment, against baseline: Baseline) -> Double {
+        let reference = baseline.score(for: assessment.dimension) ?? 1
+        let gap = max(0, reference - assessment.score)
+        return gap * (Self.importance[assessment.dimension] ?? 1)
+    }
+}

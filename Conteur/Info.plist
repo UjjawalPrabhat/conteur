@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Conteur listens while you tell your story so it can give you feedback on how you told it. Your recordings stay on this iPhone.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Conteur watches your expressions while you speak, shows you how your face is reading, and tells you where your delivery came alive and where it went flat. Nothing is recorded — no video is ever saved or sent anywhere.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Conteur turns your retelling into text on this iPhone so it can point to the exact moments it is giving you feedback about.</string>
+</dict>
+</plist>
