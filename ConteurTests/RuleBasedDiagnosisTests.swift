@@ -10,6 +10,56 @@ struct RuleBasedDiagnosisTests {
         #expect(diagnosis.diagnose(.empty, against: .none).focus == nil)
     }
 
+    /// A two-word retelling used to report strong across every dimension, because no
+    /// rule could fire and nothing firing was scored as nothing wrong.
+    @Test func tooLittleToJudgeIsNotReportedAsStrong() {
+        let barelyAnything = DiagnosticInput(
+            timeline: FeatureTimeline(
+                transcript: filled(words: 2, fillers: 0),
+                delivery: DeliveryAnalyzer().analyze(filled(words: 2, fillers: 0)),
+                prosody: [],
+                expressivity: []
+            ),
+            narrative: .empty
+        )
+
+        let result = diagnosis.diagnose(barelyAnything, against: .none)
+
+        #expect(result.assessments.allSatisfy { $0.band == .insufficient })
+        #expect(result.focus == nil)
+    }
+
+    /// A dimension speaks when at least one of its rules had something to look at, and
+    /// stays quiet otherwise — the prerequisite belongs to each rule, not to the
+    /// dimension as a whole.
+    @Test func aDimensionSpeaksOnlyWhenOneOfItsRulesCouldLook() {
+        let oneBeat = input(beats: [beat(0, 30, .corePlot, statesStakes: true)])
+
+        let result = diagnosis.diagnose(oneBeat, against: .none)
+
+        // Nothing about engagement is available here: stakes needs two core beats, pitch
+        // needs voiced audio, and expression needs a located climax.
+        #expect(result.assessment(for: .engagement)?.band == .insufficient)
+        // Structure and sequencing can both be read from a single beat.
+        #expect(result.assessment(for: .structure)?.band != .insufficient)
+        #expect(result.assessment(for: .coherence)?.band != .insufficient)
+    }
+
+    /// The flagged weakness cannot also be described as strong.
+    @Test func aDimensionWithAFindingIsNeverStrong() {
+        let input = input(
+            beats: [
+                beat(0, 30, .corePlot, introduces: ["brother"], statesStakes: true),
+                beat(30, 60, .corePlot, references: ["protagonist"], connectsCausally: true),
+            ]
+        )
+
+        let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
+
+        #expect(coherence?.findings.isEmpty == false)
+        #expect(coherence?.band != .strong)
+    }
+
     @Test func introducingSomethingAndNeverReturningToItIsFound() {
         let input = input(beats: [
             beat(0, 30, .corePlot, introduces: ["brother"]),

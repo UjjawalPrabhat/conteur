@@ -10,5 +10,6 @@ struct RootView: View {
                 HistoryView()
             }
         }
+        .task { await RecordingCleanup.removeStrandedRecordings() }
     }
 }

@@ -5,6 +5,9 @@ import Foundation
 struct DroppedThreadRule: DiagnosticRule {
     let dimension = Dimension.coherence
 
+    /// A thread can only be dropped if there was somewhere later to pick it up.
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.narrative.beats.count >= 2 }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let beats = input.narrative.beats
         guard beats.count > 1 else { return [] }
@@ -24,7 +27,10 @@ struct DroppedThreadRule: DiagnosticRule {
             .map { entity, beat in
                 Finding(
                     dimension: dimension,
+                    subject: entity,
                     observation: "\(entity) was introduced at \(beat.start.timestampLabel) and never came up again",
+                    // A thread is either carried or it is not; there is no half-dropping it.
+                    magnitude: 1,
                     weight: 0.3,
                     evidence: [Evidence(at: beat.start, quote: beat.summary, measure: nil)]
                 )
@@ -40,6 +46,8 @@ struct CausalDensityRule: DiagnosticRule {
 
     let dimension = Dimension.coherence
 
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.narrative.beats.count >= 3 }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let beats = input.narrative.beats
         guard beats.count >= 3 else { return [] }
@@ -51,7 +59,9 @@ struct CausalDensityRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "causal-links",
                 observation: "only \(causal) of \(beats.count) stretches connected one event to the next by cause",
+                magnitude: 1 - share,
                 weight: 0.3,
                 evidence: [
                     Evidence(
@@ -68,6 +78,8 @@ struct CausalDensityRule: DiagnosticRule {
 struct SequencingRule: DiagnosticRule {
     let dimension = Dimension.coherence
 
+    func canEvaluate(in input: DiagnosticInput) -> Bool { !input.narrative.beats.isEmpty }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         guard !input.narrative.beats.isEmpty, !input.narrative.arc.sequencingIsFollowable else {
             return []
@@ -75,7 +87,9 @@ struct SequencingRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "sequencing",
                 observation: "the order of events was hard to follow",
+                magnitude: 1,
                 weight: 0.35,
                 evidence: [Evidence(at: 0, quote: nil, measure: nil)]
             )
@@ -89,6 +103,8 @@ struct RestartRule: DiagnosticRule {
 
     let dimension = Dimension.coherence
 
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount >= 30 }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let restarts = input.timeline.delivery.restarts
         guard restarts.count > Self.tolerated else { return [] }
@@ -96,7 +112,9 @@ struct RestartRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "restarts",
                 observation: "\(restarts.count) sentences were restarted mid-phrase",
+                magnitude: Double(restarts.count),
                 weight: 0.2,
                 evidence: restarts.prefix(3).map {
                     Evidence(at: $0.at, quote: $0.phrase, measure: nil)

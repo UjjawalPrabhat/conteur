@@ -62,8 +62,40 @@ struct ExpressionReaderTests {
         #expect(reading.impression == .flat)
     }
 
-    @Test func movementWithoutAKnownPatternStillReadsAsAnimated() {
-        let reading = reader.read(departure([.eyeWideLeft: 0.12, .eyeWideRight: 0.12]))
+    /// The realistic version of the same trap: a talking face moves other channels a
+    /// little as well, so the stillness gate passes and the jaw was free to decide the
+    /// verdict on its own. Every speaker read as surprised.
+    @Test func aTalkingFaceIsNotSurprised() {
+        let reading = reader.read(departure([
+            .jawOpen: 0.5,
+            .mouthSmileLeft: 0.07,
+            .mouthSmileRight: 0.07,
+        ]))
+
+        #expect(reading.impression != .surprised)
+    }
+
+    /// A smile while speaking must not be outvoted by the open jaw beside it.
+    @Test func aSmileWhileTalkingStillReadsAsWarm() {
+        let reading = reader.read(departure([
+            .jawOpen: 0.5,
+            .mouthSmileLeft: 0.2,
+            .mouthSmileRight: 0.2,
+        ]))
+
+        #expect(reading.impression == .warm)
+    }
+
+    /// Ordinary movement with no pattern is not "animated" — that label reads as praise
+    /// when it only ever meant "unclassified".
+    @Test func ordinaryMovementWithoutAPatternReadsAsNeutral() {
+        let reading = reader.read(departure([.eyeWideLeft: 0.09, .eyeWideRight: 0.09]))
+
+        #expect(reading.impression == .neutral)
+    }
+
+    @Test func aBusyFaceWithoutAKnownPatternReadsAsAnimated() {
+        let reading = reader.read(departure([.eyeWideLeft: 0.25, .eyeWideRight: 0.25]))
 
         #expect(reading.impression == .animated)
     }

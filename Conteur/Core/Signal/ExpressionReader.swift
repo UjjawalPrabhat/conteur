@@ -8,6 +8,7 @@ import Foundation
 /// what these describe.
 enum ConveyedImpression: String, Sendable, Hashable, CaseIterable {
     case flat
+    case neutral
     case animated
     case warm
     case tense
@@ -17,6 +18,7 @@ enum ConveyedImpression: String, Sendable, Hashable, CaseIterable {
     var label: String {
         switch self {
         case .flat: "reads as flat"
+        case .neutral: "reads as neutral"
         case .animated: "reads as animated"
         case .warm: "reads as warm"
         case .tense: "reads as tense"
@@ -44,6 +46,9 @@ struct ExpressionReader: Sendable {
     /// 0...1 range.
     private static let noise: Float = 0.05
     private static let stillness: Float = 0.06
+    /// Above this the face is doing a lot, even if none of it forms a named pattern.
+    /// Below it, movement without a pattern is just an ordinary talking face.
+    private static let busy: Float = 0.18
 
     func read(_ departure: ExpressionSample) -> ExpressionReading {
         let movement = Movement(departure)
@@ -65,7 +70,7 @@ struct ExpressionReader: Sendable {
             .max { $0.1 < $1.1 }
 
         return ExpressionReading(
-            impression: strongest?.0 ?? .animated,
+            impression: strongest?.0 ?? (animation >= Self.busy ? .animated : .neutral),
             animation: min(animation * 3, 1)
         )
     }
@@ -97,10 +102,15 @@ struct ExpressionReader: Sendable {
         }
 
         /// Raised brows together with widened eyes are what make surprise legible. A
-        /// geometric mean needs both present without demanding each clear the
-        /// threshold alone, which `min` did. A dropped jaw only amplifies it.
+        /// geometric mean needs both present without demanding each clear the threshold
+        /// alone, which `min` did.
+        ///
+        /// The jaw only amplifies a pattern that is already there. Speaking holds it open
+        /// continuously — the same reason `overall` ignores it — so letting it carry the
+        /// verdict alone labelled every talking face surprised.
         var surprise: Float {
-            Self.both(browsRaised, eyesWide) + jawOpen * 0.25
+            let core = Self.both(browsRaised, eyesWide)
+            return core < ExpressionReader.noise ? 0 : core + jawOpen * 0.25
         }
 
         var warmth: Float {

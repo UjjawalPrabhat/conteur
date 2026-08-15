@@ -10,5 +10,15 @@ struct DiagnosticInput: Sendable {
 /// failure means adding a rule rather than editing existing logic.
 protocol DiagnosticRule: Sendable {
     var dimension: Dimension { get }
+
+    /// Whether this rule had enough to look at. A rule that cannot evaluate is not the
+    /// same as a rule that found nothing wrong, and a dimension where nothing could be
+    /// evaluated must say so rather than report strength.
+    func canEvaluate(in input: DiagnosticInput) -> Bool
+
     func findings(in input: DiagnosticInput) -> [Finding]
+}
+
+extension DiagnosticRule {
+    func canEvaluate(in input: DiagnosticInput) -> Bool { true }
 }

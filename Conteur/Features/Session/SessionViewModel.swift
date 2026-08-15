@@ -11,8 +11,20 @@ final class SessionViewModel {
         case listening
         case reading
         case responding
+        case tooShort
         case failed(String)
     }
+
+    /// Each chunk costs a model session, and the whole beat sheet has to fit one 4,096
+    /// token budget at the reduce step. Ten minutes is about twenty chunks — enough for
+    /// a full retelling, short enough that the analysis after you stop stays brief.
+    static let maximumDuration: TimeInterval = 10 * 60
+    /// The last stretch, where the speaker is told to start drawing to a close.
+    static let warningDuration: TimeInterval = 60
+
+    /// Below this there is nothing to say. Saying it anyway means inventing it.
+    private static let minimumWords = 40
+    private static let minimumDuration: TimeInterval = 20
 
     private(set) var phase: Phase = .ready
     private(set) var assessment: Assessment?
@@ -27,6 +39,11 @@ final class SessionViewModel {
     private(set) var selfView: CGImage?
     private(set) var reading = ExpressionReading.still
 
+    private(set) var elapsed: TimeInterval = 0
+
+    var remaining: TimeInterval { max(0, Self.maximumDuration - elapsed) }
+    var isRunningOut: Bool { phase == .listening && remaining <= Self.warningDuration }
+
     private let transcriber: any Transcribing
     private let narrative: any NarrativeAnalyzing
     private let diagnosing: any Diagnosing
@@ -35,7 +52,6 @@ final class SessionViewModel {
 
     private let audio = AudioCapture()
     private let face = FaceCapture()
-    private let recorder = AudioRecorder()
     private let delivery = DeliveryAnalyzer()
     private let prosody = ProsodyAnalyzer()
     private let expressivity = ExpressivityAnalyzer()
@@ -45,13 +61,16 @@ final class SessionViewModel {
 
     private var baseline: Baseline = .none
     private var history: Band?
+    /// The first telling, when this is the retell against a challenge.
+    private var previous: Diagnosis?
+    private var challenge: String?
+    private let comparison = RetellingComparison()
 
     private var transcript = Transcript.empty
     private var frames: [ProsodyFrame] = []
     private var expressions: [ExpressionSample] = []
     private var beats: [Beat] = []
     private var labelledChunks = 0
-    private var recordingURL: URL?
     private var session: Task<Void, Never>?
     private var quietSince: TimeInterval?
 
@@ -71,9 +90,11 @@ final class SessionViewModel {
 
     var isListening: Bool { phase == .listening }
 
-    func prime(baseline: Baseline, history: Band?) {
+    func prime(baseline: Baseline, history: Band?, previous: Diagnosis?, challenge: String?) {
         self.baseline = baseline
         self.history = history
+        self.previous = previous
+        self.challenge = challenge
     }
 
     func begin() {
@@ -84,12 +105,8 @@ final class SessionViewModel {
         session = Task {
             do {
                 let format = try await transcriber.preferredAudioFormat()
-                let url = Self.newRecordingURL()
-                recordingURL = url
-
                 let speech = await audio.chunks()
                 let sound = await audio.chunks()
-                let stored = await audio.chunks()
                 let faces = face.samples()
                 let views = face.previewFrames()
 
@@ -102,7 +119,6 @@ final class SessionViewModel {
                     group.addTask { [weak self] in await self?.readProsody(from: sound) }
                     group.addTask { [weak self] in await self?.readExpressions(from: faces) }
                     group.addTask { [weak self] in await self?.showSelf(from: views) }
-                    group.addTask { [weak self] in await self?.store(stored, at: url) }
                 }
 
                 try await respond()
@@ -116,9 +132,15 @@ final class SessionViewModel {
     /// Ends the turn. There is no stop button in the interface — this is called when
     /// the speaker trails off.
     func end() async {
-        face.stop()
-        await audio.stop()
+        endCapture()
         await session?.value
+    }
+
+    /// Stops the microphone without waiting for analysis, so it is safe to call from
+    /// inside the session's own task when the time limit is reached.
+    private func endCapture() {
+        face.stop()
+        Task { await audio.stop() }
     }
 
     func silence() async {
@@ -160,10 +182,6 @@ final class SessionViewModel {
         selfView = nil
     }
 
-    private func store(_ chunks: AsyncStream<AudioChunk>, at url: URL) async {
-        try? await recorder.record(chunks, to: url)
-    }
-
     // MARK: - Presence
 
     /// A pause long enough to be deliberate is where a listener would settle and hold
@@ -173,6 +191,11 @@ final class SessionViewModel {
 
     private func observe(loudness: Float, at time: TimeInterval) {
         level += (min(loudness * 6, 1) - level) * 0.3
+        elapsed = time
+
+        if time >= Self.maximumDuration, phase == .listening {
+            endCapture()
+        }
 
         guard loudness < Self.quietLevel else {
             quietSince = nil
@@ -203,8 +226,14 @@ final class SessionViewModel {
     }
 
     private func respond() async throws {
-        guard let url = recordingURL, !transcript.words.isEmpty else {
-            phase = .ready
+        // Analysing a handful of words does not produce weak feedback, it produces
+        // invented feedback: the model fills the summary it is asked for, and every
+        // dimension reports strong because no rule had anything to fire on.
+        guard
+            transcript.words.count >= Self.minimumWords,
+            transcript.duration >= Self.minimumDuration
+        else {
+            phase = .tooShort
             return
         }
         phase = .reading
@@ -231,15 +260,22 @@ final class SessionViewModel {
             DiagnosticInput(timeline: timeline, narrative: narrativeReading),
             against: baseline
         )
-        let feedback = await composing.compose(from: diagnosis, history: history)
+        let progress = previous.flatMap { first in
+            challenge.flatMap { comparison.compare(first, with: diagnosis, challenge: $0) }
+        }
+        let feedback = await composing.compose(
+            from: diagnosis,
+            history: history,
+            progress: progress
+        )
 
         assessment = Assessment(
             recordedAt: .now,
-            audio: url,
             timeline: timeline,
             narrative: narrativeReading,
             diagnosis: diagnosis,
-            feedback: feedback
+            feedback: feedback,
+            progress: progress
         )
 
         phase = .responding
@@ -250,15 +286,12 @@ final class SessionViewModel {
         }
     }
 
-    private static func newRecordingURL() -> URL {
-        URL.documentsDirectory.appending(path: "retelling-\(UUID().uuidString).caf")
-    }
-
     private func reset() {
         transcript = .empty
         frames = []
         expressions = []
         neutral = ExpressionBaseline()
+        elapsed = 0
         beats = []
         labelledChunks = 0
         assessment = nil

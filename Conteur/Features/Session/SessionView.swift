@@ -4,6 +4,7 @@ struct SessionView: View {
     let challenge: String?
     let baseline: Baseline
     let history: Band?
+    let previous: Diagnosis?
     @Binding var isTelling: Bool
     let onFinish: (Assessment) -> Void
 
@@ -35,13 +36,22 @@ struct SessionView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 40)
 
+                if model.isRunningOut {
+                    Text("About \(Int(model.remaining.rounded())) seconds left — start drawing it to a close.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .monospacedDigit()
+                        .padding(.top, 8)
+                        .transition(.opacity)
+                }
+
                 Spacer()
                 action
                     .padding(.bottom, 48)
             }
         }
         .animation(.easeInOut(duration: 0.4), value: model.phase)
-        .task { model.prime(baseline: baseline, history: history) }
+        .task { model.prime(baseline: baseline, history: history, previous: previous, challenge: challenge) }
         .onChange(of: model.phase) { _, phase in
             isTelling = phase == .listening || phase == .reading
             if phase == .responding, let assessment = model.assessment {
@@ -53,8 +63,8 @@ struct SessionView: View {
     @ViewBuilder
     private var action: some View {
         switch model.phase {
-        case .ready, .failed:
-            Button("Tell me about it") { model.begin() }
+        case .ready, .failed, .tooShort:
+            Button(model.phase == .tooShort ? "Start again" : "Tell me about it") { model.begin() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
         case .preparing, .reading:
@@ -78,6 +88,8 @@ struct SessionView: View {
         case .listening: "I'm listening. Take your time."
         case .reading: "Thinking about how you told it."
         case .responding: ""
+        case .tooShort:
+            "That was too short for me to say anything useful. Tell me a bit more of it."
         case .failed(let message): message
         }
     }

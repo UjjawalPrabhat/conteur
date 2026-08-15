@@ -1,22 +1,24 @@
 import SwiftData
 import SwiftUI
 
-/// Owns the loop: tell it, hear how you told it, tell it again, see what changed —
-/// and a way back out at every step.
+/// Owns the loop: tell it, hear how you told it, tell it again, see what changed.
+///
+/// Every telling ends on the feedback screen — a second one simply shows what changed at
+/// the top of it. That keeps the loop open past two attempts, and means no telling can
+/// ever end without feedback.
 struct TellFlowView: View {
     private enum Stage: Equatable {
         case telling
         case feedback
-        case retelling
-        case comparison
     }
 
     @Environment(\.modelContext) private var context
 
     @State private var stage: Stage = .telling
     @State private var group = UUID()
-    @State private var first: Assessment?
-    @State private var second: Assessment?
+    @State private var attempt = 1
+    @State private var previous: Assessment?
+    @State private var current: Assessment?
     @State private var isTelling = false
 
     var body: some View {
@@ -30,57 +32,50 @@ struct TellFlowView: View {
     private var content: some View {
         switch stage {
         case .telling:
-            session(challenge: nil, attempt: 1) { assessment in
-                first = assessment
-                stage = .feedback
-            }
+            session
 
         case .feedback:
-            if let first {
+            if let current {
                 FeedbackView(
-                    assessment: first,
-                    onRetell: { stage = .retelling },
+                    assessment: current,
+                    onRetell: { retell() },
                     onDone: { restart() }
                 )
-            }
-
-        case .retelling:
-            session(challenge: first?.feedback?.challenge, attempt: 2) { assessment in
-                second = assessment
-                stage = .comparison
-            }
-
-        case .comparison:
-            if let first, let second {
-                ComparisonView(first: first, second: second) { restart() }
             }
         }
     }
 
-    private func session(
-        challenge: String?,
-        attempt: Int,
-        onFinish: @escaping (Assessment) -> Void
-    ) -> some View {
+    private var session: some View {
         let store = SwiftDataRetellingStore(context: context)
 
         return SessionView(
-            challenge: challenge,
+            challenge: previous?.feedback?.challenge,
             baseline: store.baseline(),
-            history: first?.focus.flatMap { store.lastBand(for: $0) },
+            history: previous?.focus.flatMap { store.lastBand(for: $0) },
+            previous: previous?.diagnosis,
             isTelling: $isTelling
         ) { assessment in
             try? store.save(assessment, attempt: attempt, group: group, isBenchmark: false)
-            onFinish(assessment)
+            current = assessment
+            stage = .feedback
         }
         // A fresh identity per attempt so the session screen starts clean rather than
         // reusing the previous attempt's view model.
         .id(attempt)
     }
 
+    private func retell() {
+        previous = current
+        current = nil
+        attempt += 1
+        isTelling = false
+        stage = .telling
+    }
+
     private func restart() {
-        first = nil
-        second = nil
+        previous = nil
+        current = nil
+        attempt = 1
         group = UUID()
         isTelling = false
         stage = .telling

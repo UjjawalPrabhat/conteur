@@ -13,11 +13,19 @@ struct TranscriptChunk: Sendable, Hashable {
 struct TranscriptChunker: Sendable {
     /// Short enough that a chunk plus instructions plus output stays inside the
     /// 4,096-token session budget, long enough to contain a whole beat.
-    private static let preferredDuration: TimeInterval = 60
-    private static let maximumDuration: TimeInterval = 90
+    ///
+    /// Kept deliberately short: several rules need more than one beat to say anything,
+    /// so minute-long chunks left any retelling under two minutes unjudgeable on
+    /// coherence and engagement. Thirty seconds is still only ~100 tokens.
+    private static let preferredDuration: TimeInterval = 30
+    private static let maximumDuration: TimeInterval = 45
 
     /// Any gap this long is a reasonable seam; below it, splitting would cut a phrase.
     private static let seamGap: TimeInterval = 0.5
+
+    /// Fewer words than this is not a stretch of story. Handed one, the model will
+    /// invent a scene to fill the summary it has been asked for, so it is never asked.
+    static let minimumWords = 12
 
     func chunks(of transcript: Transcript) -> [TranscriptChunk] {
         var chunks: [TranscriptChunk] = []
@@ -42,8 +50,17 @@ struct TranscriptChunker: Sendable {
         }
 
         if !current.isEmpty {
-            chunks.append(TranscriptChunk(words: current))
+            // A trailing fragment joins the chunk before it rather than being labelled
+            // on its own.
+            if current.count < Self.minimumWords, let previous = chunks.popLast() {
+                chunks.append(TranscriptChunk(words: previous.words + current))
+            } else {
+                chunks.append(TranscriptChunk(words: current))
+            }
         }
+
+        // Too little was said for any of it to be worth labelling.
+        guard chunks.contains(where: { $0.words.count >= Self.minimumWords }) else { return [] }
         return chunks
     }
 }

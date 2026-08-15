@@ -3,6 +3,8 @@ import Foundation
 struct MissingComponentsRule: DiagnosticRule {
     let dimension = Dimension.structure
 
+    func canEvaluate(in input: DiagnosticInput) -> Bool { !input.narrative.beats.isEmpty }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let arc = input.narrative.arc
         guard !input.narrative.beats.isEmpty else { return [] }
@@ -13,7 +15,9 @@ struct MissingComponentsRule: DiagnosticRule {
         return missing.map { component in
             Finding(
                 dimension: dimension,
+                subject: component.rawValue,
                 observation: "the retelling never established \(component.spokenName)",
+                magnitude: 1,
                 weight: 0.25,
                 evidence: [Evidence(at: 0, quote: nil, measure: nil)]
             )
@@ -30,6 +34,8 @@ struct TimeAllocationRule: DiagnosticRule {
 
     let dimension = Dimension.relevance
 
+    func canEvaluate(in input: DiagnosticInput) -> Bool { !input.narrative.beats.isEmpty }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let beats = input.narrative.beats
         let total = beats.reduce(0) { $0 + $1.duration }
@@ -44,7 +50,9 @@ struct TimeAllocationRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "padding",
                 observation: "\(share.percentLabel) of the time went to detail the story did not turn on, the longest stretch being \(longest.duration.secondsLabel) from \(longest.start.timestampLabel)",
+                magnitude: share,
                 weight: 0.35,
                 evidence: [
                     Evidence(

@@ -3,9 +3,6 @@ import SwiftUI
 struct RetellingDetailView: View {
     let retelling: StoredRetelling
 
-    @State private var player = RecordingPlayer()
-    @State private var isPlaying = false
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -19,14 +16,12 @@ struct RetellingDetailView: View {
                     labelled("What to try", challenge)
                 }
                 scores
-                playback
+                transcript
             }
             .padding()
         }
         .navigationTitle(retelling.recordedAt.formatted(.dateTime.day().month()))
         .navigationBarTitleDisplayMode(.inline)
-        .sensoryFeedback(.impact(weight: .light), trigger: isPlaying)
-        .onDisappear { stop() }
     }
 
     private var header: some View {
@@ -63,7 +58,7 @@ struct RetellingDetailView: View {
                         HStack {
                             Text(dimension.title)
                             Spacer()
-                            Text(Band(score: score).rawValue.capitalized)
+                            Text(Band(score: score).label)
                                 .foregroundStyle(.secondary)
                         }
                         .font(.callout)
@@ -73,24 +68,24 @@ struct RetellingDetailView: View {
         }
     }
 
-    /// Recordings live only on the device that made them, so an entry synced from
-    /// elsewhere — or one whose audio was cleared — has nothing to play.
+    /// The transcript is the whole record of a retelling — the audio it came from was
+    /// never written anywhere.
     @ViewBuilder
-    private var playback: some View {
-        if let audio = retelling.audio, FileManager.default.fileExists(atPath: audio.path) {
-            Button {
-                isPlaying ? stop() : start(audio)
-            } label: {
-                Label(
-                    isPlaying ? "Stop" : "Hear it back",
-                    systemImage: isPlaying ? "stop.circle" : "play.circle"
-                )
+    private var transcript: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("What you said")
+                .font(.headline)
+
+            if let text = retelling.transcriptText, !text.isEmpty {
+                Text(text)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            } else {
+                Text("No transcript was kept for this one.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderedProminent)
-        } else {
-            Text("The recording for this one is no longer on this iPhone.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -99,20 +94,5 @@ struct RetellingDetailView: View {
             Text(title).font(.headline)
             Text(body).fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private func start(_ audio: URL) {
-        isPlaying = true
-        Task {
-            let remaining = try? await player.play(audio, from: 0)
-            try? await Task.sleep(for: .seconds(remaining ?? 0))
-            await player.stop()
-            isPlaying = false
-        }
-    }
-
-    private func stop() {
-        isPlaying = false
-        Task { await player.stop() }
     }
 }

@@ -17,43 +17,85 @@ struct FeedbackView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    note
-                    evidence
-                    challenge
-                    bands
-                    transcript
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 28) {
+                        whatChanged
+                        note
+                        evidence(scrollingWith: scroll)
+                        challenge
+                        bands
+                        transcript
+                    }
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle("How you told it")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        model.stopReplay()
-                        onDone()
-                    }
+                    Button("Done", action: onDone)
                 }
             }
-            .sensoryFeedback(.impact(weight: .light), trigger: model.playing)
+            .sensoryFeedback(.selection, trigger: model.highlighted)
         }
     }
 
+    /// Shown from the second telling on. The verdict is computed, never written, so it
+    /// can say the attempt missed.
     @ViewBuilder
+    private var whatChanged: some View {
+        if let progress = model.assessment.progress {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("You were asked")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(progress.challenge)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Image(systemName: progress.verdict.symbol)
+                    Text(progress.verdict.label)
+                        .font(.headline)
+                    Spacer()
+                    Text("\(progress.before.label) → \(progress.after.label)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(progress.verdict.tint)
+
+                ForEach(progress.resolved, id: \.identity) { finding in
+                    changeRow(finding.observation, symbol: "checkmark")
+                }
+                ForEach(progress.persisted, id: \.identity) { finding in
+                    changeRow(finding.observation, symbol: "arrow.turn.down.right")
+                }
+                ForEach(progress.introduced, id: \.identity) { finding in
+                    changeRow(finding.observation, symbol: "exclamationmark")
+                }
+            }
+            .padding()
+            .background(progress.verdict.tint.opacity(0.1), in: .rect(cornerRadius: 12))
+        }
+    }
+
+    private func changeRow(_ text: String, symbol: String) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var note: some View {
-        if let feedback = model.feedback {
-            Text(feedback.note)
-                .font(.title3)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        Text(model.feedback?.note ?? "There wasn't enough in that one for me to say much about how you told it.")
+            .font(.title3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Every claim points at a moment you can go and hear. Without this the feedback
-    /// is an opinion; with it, it is a receipt.
+    /// Every claim points at the words it came from. Without that the feedback is an
+    /// opinion; with it, the reader can go and check.
     @ViewBuilder
-    private var evidence: some View {
+    private func evidence(scrollingWith scroll: ScrollViewProxy) -> some View {
         if let feedback = model.feedback, !feedback.evidence.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Where")
@@ -61,8 +103,11 @@ struct FeedbackView: View {
                     .padding(.bottom, 8)
 
                 ForEach(Array(feedback.evidence.enumerated()), id: \.offset) { _, item in
-                    PlayableRow(isPlaying: model.isPlaying(item.at)) {
-                        model.replay(from: item.at)
+                    Button {
+                        model.reveal(item.at)
+                        withAnimation {
+                            scroll.scrollTo(model.passage(covering: item.at)?.start, anchor: .center)
+                        }
                     } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(item.at.timestampLabel)
@@ -70,7 +115,7 @@ struct FeedbackView: View {
                                 .foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 2) {
                                 if let quote = item.quote {
-                                    Text(quote)
+                                    Text(quote).multilineTextAlignment(.leading)
                                 }
                                 if let measure = item.measure {
                                     Text(measure)
@@ -79,32 +124,33 @@ struct FeedbackView: View {
                                 }
                             }
                             Spacer(minLength: 8)
+                            Image(systemName: "text.quote")
+                                .foregroundStyle(.tint)
                         }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    @ViewBuilder
+    /// Always present. The way back into the loop must not depend on there having been
+    /// something wrong.
     private var challenge: some View {
-        if let feedback = model.feedback {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Try again")
-                    .font(.headline)
-                Text(feedback.challenge)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Try again")
+                .font(.headline)
+            Text(model.feedback?.challenge ?? "Tell it again, and give it a bit more room this time.")
+                .fixedSize(horizontal: false, vertical: true)
 
-                Button("Tell it again") {
-                    model.stopReplay()
-                    onRetell()
-                }
+            Button("Tell it again", action: onRetell)
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 4)
-            }
-            .padding()
-            .background(.tint.opacity(0.08), in: .rect(cornerRadius: 12))
         }
+        .padding()
+        .background(.tint.opacity(0.08), in: .rect(cornerRadius: 12))
     }
 
     private var bands: some View {
@@ -116,7 +162,7 @@ struct FeedbackView: View {
                 HStack {
                     Text(assessment.dimension.title)
                     Spacer()
-                    Text(assessment.band.rawValue.capitalized)
+                    Text(assessment.band.label)
                         .foregroundStyle(assessment.dimension == model.feedback?.dimension ? .primary : .secondary)
                 }
                 .font(.callout)
@@ -127,54 +173,31 @@ struct FeedbackView: View {
     @ViewBuilder
     private var transcript: some View {
         if !model.passages.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("What you said")
                     .font(.headline)
-                    .padding(.bottom, 8)
 
                 ForEach(model.passages) { passage in
-                    PlayableRow(isPlaying: model.isPlaying(passage.start)) {
-                        model.replay(from: passage.start)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(passage.start.timestampLabel)
-                                .font(.caption)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                            Text(passage.text)
-                                .font(.callout)
-                                .multilineTextAlignment(.leading)
-                        }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(passage.start.timestampLabel)
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        Text(passage.text)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(10)
+                    .background(
+                        model.highlighted == passage.start
+                            ? AnyShapeStyle(.tint.opacity(0.14))
+                            : AnyShapeStyle(.clear),
+                        in: .rect(cornerRadius: 10)
+                    )
+                    .animation(.easeOut(duration: 0.25), value: model.highlighted)
+                    .id(passage.start)
                 }
             }
         }
-    }
-}
-
-/// A row that plays a moment back, and looks like it is doing so.
-private struct PlayableRow<Label: View>: View {
-    let isPlaying: Bool
-    let action: () -> Void
-    @ViewBuilder let label: Label
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                label
-                Spacer(minLength: 0)
-                Image(systemName: isPlaying ? "waveform" : "play.circle")
-                    .foregroundStyle(.tint)
-                    .symbolEffect(.variableColor.iterative, isActive: isPlaying)
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(
-                isPlaying ? AnyShapeStyle(.tint.opacity(0.12)) : AnyShapeStyle(.clear),
-                in: .rect(cornerRadius: 10)
-            )
-        }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.2), value: isPlaying)
     }
 }

@@ -42,9 +42,15 @@ struct RuleBasedDiagnosis: Diagnosing {
     func diagnose(_ input: DiagnosticInput, against baseline: Baseline) -> Diagnosis {
         guard !input.timeline.transcript.words.isEmpty else { return .empty }
 
-        let findings = rules.flatMap { $0.findings(in: input) }
+        let usable = rules.filter { $0.canEvaluate(in: input) }
+        let findings = usable.flatMap { $0.findings(in: input) }
         let assessments = Dimension.allCases.map { dimension in
-            assess(dimension, from: findings.filter { $0.dimension == dimension })
+            assess(
+                dimension,
+                from: findings.filter { $0.dimension == dimension },
+                // A dimension can be judged when any of its rules had something to look at.
+                judgeable: usable.contains { $0.dimension == dimension }
+            )
         }
 
         return Diagnosis(
@@ -53,13 +59,27 @@ struct RuleBasedDiagnosis: Diagnosing {
         )
     }
 
-    private func assess(_ dimension: Dimension, from findings: [Finding]) -> DimensionAssessment {
+    private func assess(
+        _ dimension: Dimension,
+        from findings: [Finding],
+        judgeable: Bool
+    ) -> DimensionAssessment {
+        guard judgeable else {
+            return DimensionAssessment(
+                dimension: dimension,
+                band: .insufficient,
+                score: 1,
+                findings: []
+            )
+        }
+
         let deductions = findings.reduce(0) { $0 + $1.weight }
         let score = max(0, 1 - deductions)
 
         return DimensionAssessment(
             dimension: dimension,
-            band: Band(score: score),
+            // Something was flagged here, so it cannot also be reported as strong.
+            band: findings.isEmpty ? Band(score: score) : min(Band(score: score), .developing),
             score: score,
             findings: findings.sorted { $0.weight > $1.weight }
         )

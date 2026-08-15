@@ -21,8 +21,9 @@ final class StoredRetelling {
     var challenge: String?
     /// Per-dimension scores, encoded because SwiftData cannot store a dictionary.
     var scoreData: Data?
-    /// Filename only. Recordings stay on the device that made them and are never synced.
-    var audioFilename: String?
+    /// What was said. The only record of a retelling that outlives the session — audio
+    /// is transcribed as it arrives and never written anywhere.
+    var transcriptText: String?
 
     var wordCount: Int = 0
     var duration: TimeInterval = 0
@@ -36,7 +37,7 @@ final class StoredRetelling {
         note: String? = nil,
         challenge: String? = nil,
         scoreData: Data? = nil,
-        audioFilename: String? = nil,
+        transcriptText: String? = nil,
         wordCount: Int = 0,
         duration: TimeInterval = 0
     ) {
@@ -48,7 +49,7 @@ final class StoredRetelling {
         self.note = note
         self.challenge = challenge
         self.scoreData = scoreData
-        self.audioFilename = audioFilename
+        self.transcriptText = transcriptText
         self.wordCount = wordCount
         self.duration = duration
     }
@@ -62,11 +63,5 @@ extension StoredRetelling {
 
     var focusDimension: Dimension? {
         focus.flatMap(Dimension.init(rawValue:))
-    }
-
-    /// Recordings can be deleted or arrive from another device without their audio, so
-    /// a stored retelling may have no playable file.
-    var audio: URL? {
-        audioFilename.map { URL.documentsDirectory.appending(path: $0) }
     }
 }

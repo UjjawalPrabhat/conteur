@@ -4,11 +4,12 @@ import Foundation
 /// say about it.
 struct Assessment: Sendable {
     let recordedAt: Date
-    let audio: URL
     let timeline: FeatureTimeline
     let narrative: NarrativeReading
     let diagnosis: Diagnosis
     let feedback: Feedback?
+    /// Present only on a second telling.
+    let progress: RetellingProgress?
 
     var focus: Dimension? { diagnosis.focus?.dimension }
 

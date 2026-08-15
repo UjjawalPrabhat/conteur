@@ -31,7 +31,15 @@ enum AudioSessionRole: Sendable {
 struct AudioSessionController: Sendable {
     static func activate(_ role: AudioSessionRole) throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(role.category, mode: role.mode)
+
+        if session.category != role.category || session.mode != role.mode {
+            // The output route is chosen when the session activates, so changing the
+            // category underneath a live session leaves playback on whatever route
+            // recording picked — the earpiece. It has to go down and come back up.
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            try session.setCategory(role.category, mode: role.mode)
+        }
+
         try session.setActive(true)
     }
 

@@ -33,7 +33,7 @@ struct SwiftDataRetellingStore: RetellingStore {
             note: assessment.feedback?.note,
             challenge: assessment.feedback?.challenge,
             scoreData: try? JSONEncoder().encode(assessment.scores),
-            audioFilename: assessment.audio.lastPathComponent,
+            transcriptText: assessment.timeline.transcript.text,
             wordCount: assessment.timeline.delivery.wordCount,
             duration: assessment.timeline.duration
         )

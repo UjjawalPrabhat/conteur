@@ -4,6 +4,10 @@ import Foundation
 struct StakesGapRule: DiagnosticRule {
     let dimension = Dimension.engagement
 
+    func canEvaluate(in input: DiagnosticInput) -> Bool {
+        input.narrative.beats.count { $0.kind == .corePlot } >= 2
+    }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let beats = input.narrative.beats
         let core = beats.filter { $0.kind == .corePlot }
@@ -12,7 +16,9 @@ struct StakesGapRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "stakes",
                 observation: "the retelling never said what was at stake or why any of it mattered",
+                magnitude: 1,
                 weight: 0.4,
                 evidence: core.prefix(2).map {
                     Evidence(at: $0.start, quote: $0.summary, measure: nil)
@@ -29,6 +35,11 @@ struct MonotoneRule: DiagnosticRule {
 
     let dimension = Dimension.engagement
 
+    /// Pitch needs voiced audio, not beats — a short retelling can still be monotone.
+    func canEvaluate(in input: DiagnosticInput) -> Bool {
+        input.timeline.prosody.contains { $0.pitch != nil }
+    }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
         let variation = input.timeline.pitchVariation
         guard variation > 0, variation < Self.minimumVariation else { return [] }
@@ -36,7 +47,10 @@ struct MonotoneRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "pitch",
                 observation: "the pitch of your voice barely moved across the whole retelling",
+                // How far short of moving enough, so a voice that moved more reads better.
+                magnitude: Double(Self.minimumVariation - variation),
                 weight: 0.3,
                 evidence: [
                     Evidence(at: 0, quote: nil, measure: Double(variation).percentLabel)
@@ -51,6 +65,10 @@ struct FlatClimaxRule: DiagnosticRule {
     private static let stillness: Float = 0.02
 
     let dimension = Dimension.engagement
+
+    func canEvaluate(in input: DiagnosticInput) -> Bool {
+        input.narrative.arc.climaxBeat != nil && !input.timeline.expressivity.isEmpty
+    }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
         guard
@@ -67,7 +85,9 @@ struct FlatClimaxRule: DiagnosticRule {
         return [
             Finding(
                 dimension: dimension,
+                subject: "climax-expression",
                 observation: "your face stayed still through the turning point at \(climax.start.timestampLabel)",
+                magnitude: Double(Self.stillness - variation),
                 weight: 0.25,
                 evidence: [
                     Evidence(
