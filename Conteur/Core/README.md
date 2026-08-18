@@ -350,6 +350,125 @@ contradict it. The model phrases the outcome; it does not decide it.
 
 ---
 
+## Where this comes from
+
+Some of what follows is taken from narrative and fluency research. Some of it I made up.
+Those are different things, and the difference matters — a threshold with a paper behind it
+can be defended, and one without it can only be tuned until it feels right.
+
+Three tiers, used consistently below:
+
+| | Means |
+|:--:|---|
+| **● grounded** | Taken from a named framework. The categories, not just the idea. |
+| **◐ inspired** | The concept comes from the literature; the implementation is ours and is cruder than the source. |
+| **○ invented** | Mine. No research behind it. Tune freely. |
+
+### At a glance
+
+| Dimension | Tier | Chiefly from |
+|---|:--:|---|
+| **Structure** | ● | Stein & Glenn story grammar · Labov |
+| **Delivery** | ● | Speed / breakdown / repair fluency |
+| **Coherence** | ◐ | Causal network theory · entity-based coherence |
+| **Engagement** | ◐ | Labov's *evaluation* — but see the weakness below |
+| **Relevance** | ○ | Nothing. The weakest link in the system. |
+
+---
+
+### Structure ●
+
+`StoryComponent` in [../Shared/Beat.swift](../Shared/Beat.swift) is close to Stein &
+Glenn's episode categories:
+
+| Ours | Source |
+|---|---|
+| `setting` | Stein & Glenn *setting* · Labov *orientation* |
+| `initiatingEvent` | Stein & Glenn *initiating event* · Labov *complicating action* |
+| `goal` | Stein & Glenn *internal response / goal* |
+| `attempts` | Stein & Glenn *attempt* |
+| `consequences` | Stein & Glenn *consequence* |
+| `resolution` | Labov *resolution* · Mandler & Johnson *ending* |
+| `conflict` | **○ not from story grammar** — dramatic-structure vocabulary, added by us |
+
+Labov's **abstract** and **coda** are not modelled at all.
+
+### Coherence ◐
+
+| Rule | Source | Tier |
+|---|---|:--:|
+| `CausalDensityRule` | Trabasso & van den Broek — causal connectivity predicts what listeners recall and rate as important | ● |
+| `DroppedThreadRule` | Entity-based coherence (Centering Theory; Barzilay & Lapata's entity grid) | ◐ we check introduced-then-never-referenced; the sources model *transition types* between mentions |
+| `RestartRule` | Levelt, self-repair | ● |
+| `SequencingRule` | Labov's temporal-ordering requirement | ◐ reduced to one boolean from the model |
+
+### Relevance ○
+
+`SpanKind` (`corePlot · context · character · emotional · lowValue · offTopic`) and
+`TimeAllocationRule` are **invented**. We made up the taxonomy and ask the model to apply
+it, which means the most consequential judgement in the system — what counted as padding —
+rests on a 3B model's opinion of narrative value.
+
+### Engagement ◐
+
+`statesStakes` is **Labov's evaluation**: the clauses telling a listener why the story was
+worth telling at all. This is the strongest research link in the codebase.
+
+`MonotoneRule` and `FlatClimaxRule` are **○ invented**. Prosodic expressiveness has a
+literature; we did not operationalise from it.
+
+### Delivery ●
+
+The three delivery rules map onto the **speed / breakdown / repair** fluency triad:
+
+```
+speed      → wordsPerMinute
+breakdown  → StallRule · pause inventory
+repair     → RestartRule · FilledPauseRule
+```
+
+The mid-clause versus clause-boundary pause distinction in `DeliveryAnalyzer` comes from
+the same literature.
+
+### Everything else ○
+
+`StoryShape`, `ConveyedImpression`, every numeric threshold, the importance weights, and
+the band boundaries. `ConveyedImpression` deliberately avoids mapping to Ekman's basic
+emotions, though the ARKit blendshapes underneath it correspond to FACS action units.
+
+---
+
+### Two known weaknesses
+
+**1 · Labov's evaluation is badly underweighted.** He treated evaluation as the thing that
+separates a story from a report, and as *distributed throughout* a narrative rather than
+located in one place. We reduce it to a single `statesStakes` boolean per beat, and
+`StakesGapRule` fires only when **no** beat has stakes at all — so a twelve-minute
+retelling that states stakes once, anywhere, passes clean. The gap between how central the
+research considers this and how coarsely we measure it is the largest in the system.
+
+**2 · Relevance should be derived, not labelled.** The literature already defines narrative
+importance without needing an opinion: **membership in the causal chain**. Events on the
+chain are recalled more and judged more important. We already extract `connectsCausally`
+per beat, so `lowValue` could be *computed* from causal-chain membership instead of asked
+for — which would move relevance from ○ to ●, and make it the best-grounded dimension
+rather than the worst.
+
+### References
+
+- Labov & Waletzky (1967), *Narrative Analysis: Oral Versions of Personal Experience*; Labov (1972), *Language in the Inner City*
+- Stein & Glenn (1979), *An Analysis of Story Comprehension in Elementary School Children*
+- Mandler & Johnson (1977), *Remembrance of Things Parsed: Story Structure and Recall*
+- Trabasso & van den Broek (1985), *Causal Thinking and the Representation of Narrative Events*
+- Grosz, Joshi & Weinstein (1995), *Centering: A Framework for Modeling the Local Coherence of Discourse*
+- Barzilay & Lapata (2008), *Modeling Local Coherence: An Entity-Based Approach*
+- Levelt (1983), *Monitoring and Self-Repair in Speech*
+- Segalowitz (2010), *Cognitive Bases of Second Language Fluency*; Skehan on speed/breakdown/repair fluency
+- Ekman & Friesen (1978), *Facial Action Coding System*
+- Barrett et al. (2019), *Emotional Expressions Reconsidered* — why `ConveyedImpression` describes what a face conveys rather than what it feels
+
+---
+
 ## Why the same recording always gives the same answer
 
 If attempt 2 is better but scores lower because the model sampled differently, the
@@ -370,14 +489,38 @@ Verified by `theSameRetellingAlwaysDiagnosesIdentically()` in
 struct MyRule: DiagnosticRule {
     let dimension = Dimension.coherence
 
+    /// Whether there was enough to look at. Returning false makes the dimension report
+    /// "not enough to tell" rather than strength — say so honestly, because a rule that
+    /// could not run is not a rule that found nothing wrong.
+    func canEvaluate(in input: DiagnosticInput) -> Bool {
+        input.narrative.beats.count >= 2
+    }
+
     func findings(in input: DiagnosticInput) -> [Finding] {
-        // read input.timeline and input.narrative, return findings —
-        // each with a weight and at least one timestamped Evidence
+        [
+            Finding(
+                dimension: dimension,
+                // Constant across attempts — this is how a second telling is compared
+                // with a first, so it must not contain a timestamp or a count.
+                subject: "what-went-wrong",
+                // Stated as fact, not advice. The wording the user sees is composed later.
+                observation: "…",
+                // How much of the problem there is. Lower is always better, so the same
+                // problem reduced can be told from the same problem unchanged.
+                magnitude: 1,
+                weight: 0.3,
+                evidence: [Evidence(at: 0, quote: "…", measure: nil)]
+            )
+        ]
     }
 }
 ```
 
 Add it to `RuleBasedDiagnosis.standardRules`. Nothing else changes.
+
+If the rule comes from a framework, note which one — [Where this comes from](#where-this-comes-from)
+tracks that, and a rule with a paper behind it can be defended where an invented threshold
+can only be tuned.
 
 **Every finding must carry evidence.** Each `Evidence` holds a timestamp and the words it
 came from, and the feedback view scrolls to that passage in the transcript when a finding
