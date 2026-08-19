@@ -20,7 +20,8 @@ struct RuleBasedDiagnosisTests {
                 prosody: [],
                 expressivity: []
             ),
-            narrative: .empty
+            narrative: .empty,
+            readingProgress: nil
         )
 
         let result = diagnosis.diagnose(barelyAnything, against: .none)
@@ -188,6 +189,108 @@ struct RuleBasedDiagnosisTests {
         #expect(Set(bands).count == 1)
     }
 
+    // MARK: - Continuation tests
+
+    /// In a continuation session, missing components already covered in prior sessions
+    /// are not flagged. Chapter 25 should not be told it never established the setting.
+    @Test func missingComponentsAlreadyCoveredAreNotFlaggedInContinuation() {
+        let progress = ReadingProgress(
+            previousSessions: 1,
+            coveredComponents: [.setting, .initiatingEvent],
+            stakesEstablished: true,
+            knownEntities: []
+        )
+        let input = input(
+            beats: [beat(0, 30, .corePlot)],
+            shape: .plotDriven,
+            present: [.conflict, .attempts],
+            readingProgress: progress
+        )
+
+        let structure = diagnosis.diagnose(input, against: .none).assessment(for: .structure)
+        #expect(structure?.findings.isEmpty == true)
+    }
+
+    /// Standalone behaviour is unchanged: the same shape still flags missing components
+    /// when no prior progress is supplied.
+    @Test func missingComponentsAreStillFlaggedWhenThereIsNoContinuation() {
+        let input = input(
+            beats: [beat(0, 30, .corePlot)],
+            shape: .plotDriven,
+            present: [.conflict, .attempts]
+        )
+
+        let structure = diagnosis.diagnose(input, against: .none).assessment(for: .structure)
+        #expect(structure?.findings.isEmpty == false)
+    }
+
+    /// A continuation session that introduces an entity and never returns to it is still
+    /// flagged — the thread is dropped within this retelling, regardless of prior chapters.
+    @Test func aThreadDroppedWithinAChapterIsStillFlaggedInContinuation() {
+        let progress = ReadingProgress(
+            previousSessions: 1,
+            coveredComponents: [],
+            stakesEstablished: false,
+            knownEntities: []
+        )
+        let input = input(
+            beats: [
+                beat(0, 30, .corePlot, introduces: ["brother"]),
+                beat(30, 60, .corePlot, references: ["protagonist"]),
+            ],
+            readingProgress: progress
+        )
+
+        let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
+        #expect(coherence?.findings.isEmpty == false)
+        #expect(coherence?.findings.first?.subject == "brother")
+    }
+
+    /// Stakes already established in a prior session suppress the gap finding in
+    /// continuation sessions, but not in standalone ones.
+    @Test func stakesGapIsSuppressedWhenAlreadyEstablished() {
+        let continuation = input(
+            beats: [beat(0, 30, .corePlot), beat(30, 60, .corePlot)],
+            readingProgress: ReadingProgress(
+                previousSessions: 1,
+                coveredComponents: [],
+                stakesEstablished: true,
+                knownEntities: []
+            )
+        )
+        let standalone = input(
+            beats: [beat(0, 30, .corePlot), beat(30, 60, .corePlot)]
+        )
+
+        #expect(diagnosis.diagnose(continuation, against: .none).assessment(for: .engagement)?.findings.isEmpty == true)
+        #expect(diagnosis.diagnose(standalone, against: .none).assessment(for: .engagement)?.findings.isEmpty == false)
+    }
+
+    @Test func readingProgressAccumulatesAcrossSessions() {
+        var progress = ReadingProgress.none
+        let first = input(
+            beats: [beat(0, 30, .corePlot, introduces: ["brother"], statesStakes: true)],
+            present: [.setting, .conflict]
+        )
+        let second = input(
+            beats: [beat(0, 30, .corePlot, introduces: ["sister"])],
+            present: [.setting]
+        )
+
+        progress = RuleBasedDiagnosis.readingProgress(from: first.narrative, previous: progress)
+        #expect(progress.previousSessions == 1)
+        #expect(progress.coveredComponents.contains(.setting))
+        #expect(progress.coveredComponents.contains(.conflict))
+        #expect(progress.stakesEstablished == true)
+        #expect(progress.knownEntities.contains("brother"))
+
+        progress = RuleBasedDiagnosis.readingProgress(from: second.narrative, previous: progress)
+        #expect(progress.previousSessions == 2)
+        #expect(progress.coveredComponents.contains(.setting))
+        #expect(progress.knownEntities.contains("brother"))
+        #expect(progress.knownEntities.contains("sister"))
+    }
+
     // MARK: - Fixtures
 
     private func beat(
@@ -215,6 +318,7 @@ struct RuleBasedDiagnosisTests {
         beats: [Beat],
         shape: StoryShape = .thematic,
         present: Set<StoryComponent> = Set(StoryComponent.allCases),
+        readingProgress: ReadingProgress = .none,
         transcript: Transcript? = nil
     ) -> DiagnosticInput {
         let transcript = transcript ?? filled(words: 20, fillers: 0)
@@ -233,7 +337,8 @@ struct RuleBasedDiagnosisTests {
                     climaxBeat: nil,
                     sequencingIsFollowable: true
                 )
-            )
+            ),
+            readingProgress: readingProgress
         )
     }
 

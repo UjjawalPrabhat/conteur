@@ -5,6 +5,7 @@ struct SessionView: View {
     let baseline: Baseline
     let history: Band?
     let previous: Diagnosis?
+    let readingProgress: ReadingProgress
     @Binding var isTelling: Bool
     let onFinish: (Assessment) -> Void
 
@@ -51,7 +52,7 @@ struct SessionView: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: model.phase)
-        .task { model.prime(baseline: baseline, history: history, previous: previous, challenge: challenge) }
+        .task { model.prime(baseline: baseline, history: history, previous: previous, challenge: challenge, readingProgress: readingProgress) }
         .onChange(of: model.phase) { _, phase in
             isTelling = phase == .listening || phase == .reading
             if phase == .responding, let assessment = model.assessment {

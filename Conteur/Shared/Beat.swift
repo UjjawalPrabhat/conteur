@@ -25,6 +25,53 @@ struct Beat: Sendable, Hashable {
     var duration: TimeInterval { end - start }
 }
 
+// MARK: - Entity resolution
+
+private let pronouns: Set<String> = [
+    "he", "she", "they", "him", "her", "them",
+    "his", "hers", "theirs"
+]
+
+extension [Beat] {
+    /// The model labels each chunk in isolation, so it has no memory of what it
+    /// labelled in earlier chunks. A chunk that starts with "So he..." or "Then
+    /// the brother..." may be mislabelled as introducing an entity that was in fact
+    /// established earlier in the same retelling. This pass reclassifies those
+    /// false introductions as references, using only the session's own output as
+    /// context — no extra model calls.
+    ///
+    /// The rule is simple: once an entity has appeared anywhere in the session
+    /// (in either introduced or referenced), it cannot be introduced again.
+    /// Pronouns are always references.
+    func resolveEntities() -> [Beat] {
+        var seen: Set<String> = []
+        return map { beat in
+            let alreadySeen = seen
+
+            let reclassified = beat.entitiesIntroduced.filter { entity in
+                pronouns.contains(entity) || alreadySeen.contains(entity)
+            }
+
+            let corrected = Beat(
+                start: beat.start,
+                end: beat.end,
+                summary: beat.summary,
+                kind: beat.kind,
+                entitiesIntroduced: beat.entitiesIntroduced.filter { entity in
+                    !pronouns.contains(entity) && !alreadySeen.contains(entity)
+                },
+                entitiesReferenced: beat.entitiesReferenced + reclassified,
+                statesStakes: beat.statesStakes,
+                connectsCausally: beat.connectsCausally
+            )
+
+            seen.formUnion(beat.entitiesIntroduced)
+            seen.formUnion(beat.entitiesReferenced)
+            return corrected
+        }
+    }
+}
+
 /// Applying one structural template to every retelling penalizes stories that
 /// legitimately lack a tidy resolution, so expectations are conditioned on shape.
 enum StoryShape: String, Sendable, Hashable, CaseIterable {

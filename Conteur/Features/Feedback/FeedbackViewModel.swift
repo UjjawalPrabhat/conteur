@@ -15,8 +15,39 @@ final class FeedbackViewModel {
 
     var feedback: Feedback? { assessment.feedback }
 
+    var readingProgress: ReadingProgress { assessment.readingProgress }
+
     var bands: [DimensionAssessment] {
         assessment.diagnosis.assessments.sorted { $0.dimension.rawValue < $1.dimension.rawValue }
+    }
+
+    var allFindings: [Dimension: [Finding]] {
+        var grouped: [Dimension: [Finding]] = [:]
+        for assessment in assessment.diagnosis.assessments {
+            guard !assessment.findings.isEmpty else { continue }
+            grouped[assessment.dimension] = assessment.findings
+        }
+        return grouped
+    }
+
+    var deliverySignals: DeliverySignals { assessment.timeline.delivery }
+
+    struct BeatDetail: Identifiable {
+        let id: Int
+        let beat: Beat
+        let text: String
+    }
+
+    var beatDetails: [BeatDetail] {
+        assessment.narrative.beats.enumerated().map { index, beat in
+            BeatDetail(
+                id: index,
+                beat: beat,
+                text: assessment.timeline.words(in: beat.start..<beat.end)
+                    .map(\.text)
+                    .joined(separator: " ")
+            )
+        }
     }
 
     /// The retelling split into the stretches it was labelled in.

@@ -63,6 +63,7 @@ final class SessionViewModel {
     private var history: Band?
     /// The first telling, when this is the retell against a challenge.
     private var previous: Diagnosis?
+    private var readingProgress: ReadingProgress = .none
     private var challenge: String?
     private let comparison = RetellingComparison()
 
@@ -90,11 +91,18 @@ final class SessionViewModel {
 
     var isListening: Bool { phase == .listening }
 
-    func prime(baseline: Baseline, history: Band?, previous: Diagnosis?, challenge: String?) {
+    func prime(
+        baseline: Baseline,
+        history: Band?,
+        previous: Diagnosis?,
+        challenge: String?,
+        readingProgress: ReadingProgress
+    ) {
         self.baseline = baseline
         self.history = history
         self.previous = previous
         self.challenge = challenge
+        self.readingProgress = readingProgress
     }
 
     func begin() {
@@ -246,9 +254,11 @@ final class SessionViewModel {
             }
         }
 
+        let resolvedBeats = beats.resolveEntities()
+
         let narrativeReading = NarrativeReading(
-            beats: beats,
-            arc: (try? await narrative.arc(from: beats)) ?? NarrativeReading.empty.arc
+            beats: resolvedBeats,
+            arc: (try? await narrative.arc(from: resolvedBeats)) ?? NarrativeReading.empty.arc
         )
         let timeline = FeatureTimeline(
             transcript: transcript,
@@ -257,8 +267,16 @@ final class SessionViewModel {
             expressivity: expressivity.windows(from: expressions)
         )
         let diagnosis = diagnosing.diagnose(
-            DiagnosticInput(timeline: timeline, narrative: narrativeReading),
+            DiagnosticInput(
+                timeline: timeline,
+                narrative: narrativeReading,
+                readingProgress: readingProgress
+            ),
             against: baseline
+        )
+        let nextProgress = RuleBasedDiagnosis.readingProgress(
+            from: narrativeReading,
+            previous: readingProgress
         )
         let progress = previous.flatMap { first in
             challenge.flatMap { comparison.compare(first, with: diagnosis, challenge: $0) }
@@ -275,7 +293,8 @@ final class SessionViewModel {
             narrative: narrativeReading,
             diagnosis: diagnosis,
             feedback: feedback,
-            progress: progress
+            progress: progress,
+            readingProgress: nextProgress
         )
 
         phase = .responding

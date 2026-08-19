@@ -10,6 +10,8 @@ struct Assessment: Sendable {
     let feedback: Feedback?
     /// Present only on a second telling.
     let progress: RetellingProgress?
+    /// Continuity state threaded through to the next session.
+    let readingProgress: ReadingProgress
 
     var focus: Dimension? { diagnosis.focus?.dimension }
 

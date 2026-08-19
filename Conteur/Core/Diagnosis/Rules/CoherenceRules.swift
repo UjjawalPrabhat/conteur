@@ -5,12 +5,26 @@ import Foundation
 struct DroppedThreadRule: DiagnosticRule {
     let dimension = Dimension.coherence
 
-    /// A thread can only be dropped if there was somewhere later to pick it up.
-    func canEvaluate(in input: DiagnosticInput) -> Bool { input.narrative.beats.count >= 2 }
+    /// A thread can only be dropped if there was somewhere later to pick it up,
+    /// and only if the introduction was substantial enough to count as a thread.
+    private static let minimumBeatCount = 3
+
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.narrative.beats.count >= Self.minimumBeatCount }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
         let beats = input.narrative.beats
-        guard beats.count > 1 else { return [] }
+        guard beats.count >= Self.minimumBeatCount else { return [] }
+
+        // Count how many beats mention each entity, across introduced and referenced.
+        var mentionCounts: [String: Int] = [:]
+        for beat in beats {
+            for entity in beat.entitiesIntroduced {
+                mentionCounts[entity, default: 0] += 1
+            }
+            for entity in beat.entitiesReferenced {
+                mentionCounts[entity, default: 0] += 1
+            }
+        }
 
         var introductions: [String: Beat] = [:]
         for beat in beats {
@@ -22,14 +36,24 @@ struct DroppedThreadRule: DiagnosticRule {
         let everReferenced = Set(beats.flatMap(\.entitiesReferenced))
 
         return introductions
-            .filter { !everReferenced.contains($0.key) }
+            .filter { entity, beat in
+                // The entity must appear at least twice across all beats — a single
+                // mention is colour, not a thread.
+                guard (mentionCounts[entity] ?? 0) >= 2 else { return false }
+
+                // The introduction must not be the final beat — trailing off is not
+                // abandonment.
+                guard beat.end < beats.last?.end ?? 0 else { return false }
+
+                // The entity must never have been referenced in a later beat.
+                return !everReferenced.contains(entity)
+            }
             .sorted { $0.value.start < $1.value.start }
             .map { entity, beat in
                 Finding(
                     dimension: dimension,
                     subject: entity,
                     observation: "\(entity) was introduced at \(beat.start.timestampLabel) and never came up again",
-                    // A thread is either carried or it is not; there is no half-dropping it.
                     magnitude: 1,
                     weight: 0.3,
                     evidence: [Evidence(at: beat.start, quote: beat.summary, measure: nil)]

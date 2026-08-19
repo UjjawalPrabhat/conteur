@@ -109,11 +109,15 @@ struct OnDeviceNarrativeAnalyzer: NarrativeAnalyzing {
         lowValue — accurate but inconsequential detail
         offTopic — not about the story
 
-        Entities are named people, places and objects. Introduced means this stretch
-        is where it first appears. Referenced means it was already established.
+        Entities are named people, places and objects. When uncertain, prefer
+        referenced over introduced. A pronoun like "he", "she", "they", "him", "her",
+        "them", or a definite phrase like "the brother", "the house", "the city"
+        counts as referenced, not introduced, unless this stretch actually defines
+        or describes the entity for the first time. Only mark something as introduced
+        when this stretch clearly presents it as new information.
 
         Stakes means the stretch says what is at risk or why an event matters.
-        Causal means events are joined by cause, not merely sequence: "because",
+        Causal means events are joined by cause rather than just sequence: "because",
         "which meant", "so" — not "and then".
         """
 

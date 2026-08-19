@@ -111,7 +111,7 @@ struct FeedbackFlowTests {
             expressivity: []
         )
         let diagnosis = diagnosing.diagnose(
-            DiagnosticInput(timeline: timeline, narrative: reading),
+            DiagnosticInput(timeline: timeline, narrative: reading, readingProgress: nil),
             against: .none
         )
         let feedback = await composing.compose(from: diagnosis, history: nil, progress: nil)

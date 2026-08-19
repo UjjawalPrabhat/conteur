@@ -53,6 +53,7 @@ struct TellFlowView: View {
             baseline: store.baseline(),
             history: previous?.focus.flatMap { store.lastBand(for: $0) },
             previous: previous?.diagnosis,
+            readingProgress: previous?.readingProgress ?? .none,
             isTelling: $isTelling
         ) { assessment in
             try? store.save(assessment, attempt: attempt, group: group, isBenchmark: false)

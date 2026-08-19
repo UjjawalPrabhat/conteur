@@ -98,4 +98,45 @@ struct RuleBasedDiagnosis: Diagnosing {
         let gap = max(0, reference - assessment.score)
         return gap * (Self.importance[assessment.dimension] ?? 1)
     }
+
+    /// Builds a ReadingProgress record from this session's narrative, threaded off the
+    /// previous session's progress so the rules can suppress context-dependent findings
+    /// for continuation readers.
+    static func readingProgress(
+        from narrative: NarrativeReading,
+        previous: ReadingProgress
+    ) -> ReadingProgress {
+        let newlyIntroduced = Set(narrative.beats.flatMap { $0.entitiesIntroduced })
+        let knownEntities: Set<String>
+        if previous.isContinuation {
+            knownEntities = previous.knownEntities.union(newlyIntroduced)
+        } else {
+            knownEntities = newlyIntroduced
+        }
+
+        let newlyCovered = narrative.arc.present.union(narrative.beats.reduce(into: Set<StoryComponent>()) { partial, beat in
+            switch beat.kind {
+            case .corePlot: partial.formUnion([.conflict, .attempts, .consequences])
+            case .context: partial.insert(.setting)
+            case .character: break
+            case .emotional: break
+            case .lowValue: break
+            case .offTopic: break
+            }
+        })
+
+        let stakesEstablished: Bool
+        if previous.stakesEstablished {
+            stakesEstablished = true
+        } else {
+            stakesEstablished = narrative.beats.contains(where: { $0.statesStakes })
+        }
+
+        return ReadingProgress(
+            previousSessions: previous.previousSessions + 1,
+            coveredComponents: previous.coveredComponents.union(newlyCovered),
+            stakesEstablished: stakesEstablished,
+            knownEntities: knownEntities
+        )
+    }
 }
