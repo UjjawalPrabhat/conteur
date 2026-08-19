@@ -34,7 +34,7 @@ enum StoryShape: String, Sendable, Hashable, CaseIterable {
     case episodic
 }
 
-enum StoryComponent: String, Sendable, Hashable, CaseIterable {
+enum StoryComponent: String, Sendable, Hashable, CaseIterable, Codable {
     case setting
     case initiatingEvent
     case goal
