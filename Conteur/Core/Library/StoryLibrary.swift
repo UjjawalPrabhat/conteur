@@ -12,8 +12,8 @@ import Foundation
 enum StoryLibrary {
     static let all: [GuidedStory] = [thirdCast, whatTheHouseKept, theNineFifteen]
 
-    static func stories(at level: Int) -> [GuidedStory] {
-        all.filter { $0.level == level }
+    static func stories(in genre: Genre) -> [GuidedStory] {
+        all.filter { $0.genre == genre }
     }
 
     static func story(id: String) -> GuidedStory? {
@@ -21,16 +21,13 @@ enum StoryLibrary {
     }
 }
 
-// MARK: - Level 1
-
 extension StoryLibrary {
-    /// A single episode, four characters, one clear causal chain. Closest to the material
-    /// story-grammar research was built on.
+    /// The most conventional shape of the three: one episode, escalating attempts, fully
+    /// causally chained. Closest to the material story-grammar research was built on.
     static let thirdCast = GuidedStory(
         id: "third-cast",
         title: "The Third Cast",
         genre: .folkTale,
-        level: 1,
         prose: """
             Aren had fished the grey water off Coldhaven for thirty years, and for thirty \
             years the sea had given him just enough. He kept a narrow house on the cliff \
@@ -152,8 +149,6 @@ extension StoryLibrary {
     )
 }
 
-// MARK: - Level 2
-
 extension StoryLibrary {
     /// Character-driven: the events are small and the turn is a decision, so a retelling
     /// that only lists what happened misses the story.
@@ -161,7 +156,6 @@ extension StoryLibrary {
         id: "what-the-house-kept",
         title: "What the House Kept",
         genre: .domestic,
-        level: 2,
         prose: """
             Nadia had not been inside her mother's house since the spring, and she had \
             certainly not planned to be inside it alone. But the estate agent wanted it \
@@ -271,7 +265,6 @@ extension StoryLibrary {
         id: "the-nine-fifteen",
         title: "The Nine-Fifteen",
         genre: .mystery,
-        level: 2,
         prose: """
             Priya took the nine-fifteen from Ealing four days a week, and for most of a \
             year she had shared it with a man in a grey overcoat who got off at her stop \

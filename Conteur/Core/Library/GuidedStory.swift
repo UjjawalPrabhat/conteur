@@ -96,8 +96,6 @@ struct GuidedStory: Sendable, Codable, Hashable, Identifiable {
     let id: String
     let title: String
     let genre: Genre
-    /// Roughly how demanding it is: 1 is a single episode with few characters.
-    let level: Int
     let prose: String
     let beats: [CanonicalBeat]
     let cast: [StoryEntity]
