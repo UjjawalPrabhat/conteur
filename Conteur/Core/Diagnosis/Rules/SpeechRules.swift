@@ -2,6 +2,12 @@ import Foundation
 
 /// Rules that need only the recording. Unchanged by the story being known, because how
 /// somebody speaks does not depend on what they are speaking about.
+///
+/// They share a floor: below this much speech there is not enough delivery to judge, and
+/// finding no fault in forty words would otherwise be reported as strong delivery.
+enum SpeechFloor {
+    static let words = 50
+}
 
 /// A rate rather than a count, so a long retelling isn't penalised for being long.
 struct FilledPauseRule: DiagnosticRule {
@@ -9,7 +15,7 @@ struct FilledPauseRule: DiagnosticRule {
 
     let dimension = Dimension.delivery
 
-    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount > 50 }
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount >= SpeechFloor.words }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
         let signals = input.timeline.delivery
@@ -36,7 +42,7 @@ struct StallRule: DiagnosticRule {
 
     let dimension = Dimension.delivery
 
-    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount >= 30 }
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount >= SpeechFloor.words }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
         let stalls = input.timeline.delivery.pauses(of: .stall)
@@ -63,7 +69,7 @@ struct RestartRule: DiagnosticRule {
 
     let dimension = Dimension.coherence
 
-    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount >= 30 }
+    func canEvaluate(in input: DiagnosticInput) -> Bool { input.timeline.delivery.wordCount >= SpeechFloor.words }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
         let restarts = input.timeline.delivery.restarts
@@ -158,7 +164,9 @@ struct RushedClimaxRule: DiagnosticRule {
     let dimension = Dimension.delivery
 
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.comparison.locatedClimax != nil && input.timeline.delivery.wordsPerMinute > 0
+        input.timeline.delivery.wordCount >= SpeechFloor.words
+            && input.comparison.locatedClimax != nil
+            && input.timeline.delivery.wordsPerMinute > 0
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {

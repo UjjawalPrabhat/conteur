@@ -17,9 +17,8 @@ struct SourceMatcher: Sendable {
         in transcript: Transcript,
         from story: GuidedStory
     ) -> (mentioned: [StoryEntity], omitted: [StoryEntity]) {
-        let spoken = transcript.normalizedText
         let mentioned = story.cast.filter { entity in
-            entity.surfaceForms.contains { spoken.contains($0.lowercased()) }
+            entity.surfaceForms.contains { transcript.contains(phrase: $0) }
         }
         let names = Set(mentioned.map(\.name))
         return (mentioned, story.cast.filter { !names.contains($0.name) })
@@ -82,6 +81,14 @@ struct SourceMatcher: Sendable {
 extension Transcript {
     var normalizedText: String {
         words.map(\.normalized).joined(separator: " ")
+    }
+
+    /// Whether the retelling contains a phrase, matched on whole words.
+    ///
+    /// Substring matching counted "she" inside "shes" and "her" inside "there", which
+    /// inflated every entity match.
+    func contains(phrase: String) -> Bool {
+        locate(phrase) != nil
     }
 
     /// Where a phrase was spoken, or nil when it was not.

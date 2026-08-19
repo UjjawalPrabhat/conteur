@@ -58,7 +58,8 @@ struct OnDeviceComposer: FeedbackComposing {
         }
 
         lines.append("What went wrong with \(focus.dimension.rawValue):")
-        lines.append(contentsOf: focus.findings.map { "- \($0.observation)" })
+        // Capped: handed a long list, a small model restates the list.
+        lines.append(contentsOf: focus.findings.prefix(2).map { "- \($0.observation)" })
         if let history, progress == nil {
             lines.append("Last time this was \(history.rawValue).")
         }
@@ -81,6 +82,9 @@ struct OnDeviceComposer: FeedbackComposing {
         Speak to them directly, as one person to another. Name the moment, say what it
         cost the story, and stop. Three or four sentences.
 
+        Never list the observations back. Say the one thing that cost the story most, in
+        your own words, as a person would.
+
         No score, no grade, no list, no headings. Do not open by praising them and do
         not soften the observation into a suggestion.
 
@@ -88,8 +92,9 @@ struct OnDeviceComposer: FeedbackComposing {
         anything else. The verdict is already decided — never contradict it, and never
         congratulate them for something the verdict does not credit.
 
-        Then give them one thing to do differently when they tell it again. Make it
-        specific to what you just described, and make it a single sentence.
+        Then give them one thing to do differently when they tell it again. One thing, not
+        several, and never "include all of this" — name the single change that would matter
+        most, in a single sentence.
         """
 }
 

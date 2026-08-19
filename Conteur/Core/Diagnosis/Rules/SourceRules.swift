@@ -17,16 +17,27 @@ struct OmittedEventRule: DiagnosticRule {
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
-        input.comparison.omittedLoadBearing.map { beat in
+        let missing = input.comparison.omittedLoadBearing
+        guard !missing.isEmpty else { return [] }
+
+        let total = input.comparison.story.loadBearingBeats.count
+        let climax = missing.first(where: \.isClimax)
+
+        // One finding carrying every omission as evidence, rather than one finding each.
+        // Per-beat findings reached the composer as four separate observations, and a small
+        // model handed four observations restates all four instead of saying what they cost.
+        return [
             Finding(
                 dimension: dimension,
-                subject: "omitted-\(beat.id)",
-                observation: "the retelling left out \(beat.summary.firstClause)",
-                magnitude: 1,
-                weight: beat.isClimax ? 0.4 : 0.2,
-                evidence: [.missing(beat.summary)]
+                subject: "omitted-events",
+                observation: climax.map {
+                    "\(missing.count) of the story's \(total) events never came through, the turning point among them — \($0.summary.firstClause)"
+                } ?? "\(missing.count) of the story's \(total) events never came through, starting with \(missing[0].summary.firstClause)",
+                magnitude: Double(missing.count),
+                weight: min(1, Double(missing.count) * 0.15 + (climax == nil ? 0 : 0.25)),
+                evidence: missing.map { .missing($0.summary) }
             )
-        }
+        ]
     }
 }
 

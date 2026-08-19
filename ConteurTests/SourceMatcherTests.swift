@@ -39,6 +39,13 @@ struct SourceMatcherTests {
         #expect(mentioned.contains { $0.name == "Mira" })
     }
 
+    /// Substring matching counted "she" inside "shes"; entity matching is on whole words.
+    @Test func aWordInsideAnotherWordIsNotAMention() {
+        let mentioned = matcher.entities(in: retelling("the ashes were cold"), from: story).mentioned
+
+        #expect(mentioned.isEmpty)
+    }
+
     // MARK: - Invented names
 
     /// The failure this exists for: a retelling — or an analysis of one — populated with

@@ -237,7 +237,7 @@ extension StoryLibrary {
         cast: [
             StoryEntity(
                 name: "Nadia",
-                aliases: ["the daughter", "the narrator", "she"],
+                aliases: ["the daughter", "the narrator"],
                 importance: .central
             ),
             StoryEntity(
@@ -354,7 +354,7 @@ extension StoryLibrary {
         cast: [
             StoryEntity(
                 name: "Priya",
-                aliases: ["the woman", "the commuter", "the narrator", "she"],
+                aliases: ["the woman", "the commuter", "the narrator"],
                 importance: .central
             ),
             StoryEntity(

@@ -46,7 +46,10 @@ struct RuleBasedDiagnosisTests {
         let structure = diagnosis.diagnose(input, against: .none).assessment(for: .structure)
 
         #expect(structure?.findings.isEmpty == false)
-        #expect(structure?.findings.contains { $0.subject == "omitted-7" } == true)
+        // One finding carrying every omission, not one per beat.
+        #expect(structure?.findings.count == 1)
+        #expect(structure?.findings.first?.subject == "omitted-events")
+        #expect(structure?.findings.first?.evidence.count == 4)
     }
 
     @Test func tellingTheWholeStoryLeavesStructureAlone() {
@@ -210,6 +213,14 @@ struct RuleBasedDiagnosisTests {
             diagnosis.diagnose(Fixture.input(Fixture.faithful), against: .none)
                 .assessment(for: .relevance)?.findings.isEmpty == true
         )
+    }
+
+    /// Forty-five garbled words used to certify delivery as strong, because the stall rule's
+    /// floor was low enough to evaluate and found nothing.
+    @Test func deliveryIsNotCertifiedOnTooLittleSpeech() {
+        let input = Fixture.input(Fixture.faithful, transcript: Fixture.transcript(words: 45))
+
+        #expect(diagnosis.diagnose(input, against: .none).assessment(for: .delivery)?.band == .insufficient)
     }
 
     // MARK: - Delivery
