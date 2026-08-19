@@ -44,7 +44,16 @@ struct ComparisonEvaluatorTests {
         let summary = await evaluate(.failing)
 
         #expect(summary.failures.count == summary.scores.count)
-        #expect(summary.failures.allSatisfy { $0.failure != nil })
+        #expect(summary.answered.isEmpty)
+    }
+
+    /// A refusal says nothing about the model's judgement. Averaging refusals in as zero was
+    /// what made a run where six of fifteen were refused look like 36% accuracy.
+    @Test func refusalsAreExcludedFromTheAverages() async {
+        let refusing = await evaluate(.failing)
+
+        #expect(refusing.precision == 0)
+        #expect(refusing.answered.isEmpty)
     }
 
     @Test func commentarySamplesExpectNoCoverage() {

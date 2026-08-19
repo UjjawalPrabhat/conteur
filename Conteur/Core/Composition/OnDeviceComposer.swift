@@ -8,6 +8,11 @@ import FoundationModels
 struct OnDeviceComposer: FeedbackComposing {
     private static let options = GenerationOptions(sampling: .greedy)
 
+    /// Same reason as the comparison: this phrases observations about a story the app wrote
+    /// and speech the speaker just produced, and the default guardrails refuse the ones
+    /// about a bereavement.
+    private static let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+
     func compose(from diagnosis: Diagnosis, history: Band?, progress: RetellingProgress?) async -> Feedback? {
         // Nothing could be judged at all — the caller says so rather than inventing one.
         guard diagnosis.isJudgeable else { return nil }
@@ -19,10 +24,10 @@ struct OnDeviceComposer: FeedbackComposing {
         }
 
         let fallback = TemplateComposer().compose(focus, progress: progress)
-        guard case .available = SystemLanguageModel.default.availability else { return fallback }
+        guard case .available = Self.model.availability else { return fallback }
 
         do {
-            let session = LanguageModelSession(instructions: Self.instructions)
+            let session = LanguageModelSession(model: Self.model, instructions: Self.instructions)
             let draft = try await session.respond(
                 to: Self.brief(for: focus, history: history, progress: progress),
                 generating: NoteDraft.self,

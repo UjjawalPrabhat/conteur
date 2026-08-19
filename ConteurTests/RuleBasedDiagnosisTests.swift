@@ -185,6 +185,24 @@ struct RuleBasedDiagnosisTests {
         #expect(fidelity?.band == .insufficient)
     }
 
+    /// The model credits the setting beat whenever a character is named — it did so on every
+    /// commentary sample. Only the setting landing is not the story landing.
+    @Test func coveringOnlyTheSettingCountsAsTalkingAroundIt() {
+        let settingOnly = Fixture.comparison(told: [1])
+
+        #expect(settingOnly.narratedNothing)
+        #expect(settingOnly.talkedAroundIt)
+
+        let coverage = diagnosis.diagnose(Fixture.input(settingOnly), against: .none)
+            .assessment(for: .fidelity)?.findings.first { $0.subject == "coverage" }
+
+        #expect(coverage?.observation.contains("rather than telling it") == true)
+    }
+
+    @Test func coveringRealEventsIsNotTalkingAroundIt() {
+        #expect(Fixture.comparison(told: [1, 2, 3]).narratedNothing == false)
+    }
+
     // MARK: - Length
 
     @Test func aRetellingReducedToASummaryIsFlagged() {

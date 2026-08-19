@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModels
 
 /// How the model did on one sample.
 struct SampleScore: Sendable, Identifiable {
@@ -8,6 +9,10 @@ struct SampleScore: Sendable, Identifiable {
     let inventedNames: [String]
     let conveyedStakes: Bool
     let failure: String?
+    /// Refused by the guardrail rather than answered. Kept apart from other failures because
+    /// it says nothing about the model's judgement, and averaging it in as zero hid what the
+    /// model was actually doing on the samples it did answer.
+    let wasRefused: Bool
 
     var id: String { sample.id }
 
@@ -39,13 +44,17 @@ struct SampleScore: Sendable, Identifiable {
 struct EvaluationSummary: Sendable {
     let scores: [SampleScore]
 
+    /// Only the samples the model actually answered. A refusal is not a wrong answer.
+    var answered: [SampleScore] { scores.filter { $0.failure == nil } }
+    var refused: [SampleScore] { scores.filter(\.wasRefused) }
+
     var precision: Double { mean(\.precision) }
     var recall: Double { mean(\.recall) }
     var quoteYield: Double { mean(\.quoteYield) }
 
     var stakesAccuracy: Double {
-        guard !scores.isEmpty else { return 0 }
-        return Double(scores.count { $0.stakesCorrect }) / Double(scores.count)
+        guard !answered.isEmpty else { return 0 }
+        return Double(answered.count { $0.stakesCorrect }) / Double(answered.count)
     }
 
     /// The worst failure mode: crediting the speaker with events they never told.
@@ -64,8 +73,8 @@ struct EvaluationSummary: Sendable {
     }
 
     private func mean(_ path: KeyPath<SampleScore, Double>) -> Double {
-        guard !scores.isEmpty else { return 0 }
-        return scores.reduce(0) { $0 + $1[keyPath: path] } / Double(scores.count)
+        guard !answered.isEmpty else { return 0 }
+        return answered.reduce(0) { $0 + $1[keyPath: path] } / Double(answered.count)
     }
 }
 
@@ -97,7 +106,8 @@ struct ComparisonEvaluator: Sendable {
                 located: [],
                 inventedNames: [],
                 conveyedStakes: false,
-                failure: "no story with id \(sample.storyID)"
+                failure: "no story with id \(sample.storyID)",
+                wasRefused: false
             )
         }
 
@@ -109,16 +119,24 @@ struct ComparisonEvaluator: Sendable {
                 located: Set(comparison.located.map(\.beat.id)),
                 inventedNames: comparison.inventedNames.map(\.name),
                 conveyedStakes: comparison.conveyedStakes,
-                failure: nil
+                failure: nil,
+                wasRefused: false
             )
         } catch {
+            let refused: Bool
+            if case .guardrailViolation = error as? LanguageModelSession.GenerationError {
+                refused = true
+            } else {
+                refused = false
+            }
             return SampleScore(
                 sample: sample,
                 reported: [],
                 located: [],
                 inventedNames: [],
                 conveyedStakes: false,
-                failure: error.localizedDescription
+                failure: refused ? "refused by the guardrail" : error.localizedDescription,
+                wasRefused: refused
             )
         }
     }

@@ -259,7 +259,7 @@ struct CoverageRule: DiagnosticRule {
                 dimension: dimension,
                 subject: "coverage",
                 observation: comparison.talkedAroundIt
-                    ? "you talked about the story rather than telling it — \(named.map { "\($0) came up, but " } ?? "")none of its \(total) events came through"
+                    ? "you talked about the story rather than telling it — \(named.map { "\($0) came up, but " } ?? "")none of what happens in it came through"
                     : "\(told) of the story's \(total) events came through",
                 magnitude: 1 - share,
                 weight: comparison.talkedAroundIt ? 0.5 : 0.3,

@@ -80,6 +80,13 @@ struct SourceMatcherTests {
         #expect(invented.isEmpty)
     }
 
+    /// "Elspeth's" was being reported as a character the story never had.
+    @Test func aPossessiveIsTheSameName() {
+        let invented = matcher.inventedNames(in: retelling("she read Mira's letters"), from: story)
+
+        #expect(invented.isEmpty)
+    }
+
     // MARK: - Order
 
     @Test func tellingEventsInOrderScoresPerfectly() {

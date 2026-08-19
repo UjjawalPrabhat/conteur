@@ -41,7 +41,12 @@ struct SourceMatcher: Sendable {
 
         var invented: [InventedName] = []
         for (index, word) in transcript.words.enumerated() {
-            let bare = word.text.trimmingCharacters(in: .punctuationCharacters)
+            // A possessive is the same name: "Elspeth's" was being reported as somebody the
+            // story never had.
+            let bare = word.text
+                .trimmingCharacters(in: .punctuationCharacters)
+                .replacingOccurrences(of: "'s", with: "")
+                .replacingOccurrences(of: "\u{2019}s", with: "")
             guard
                 bare.count > 2,
                 bare.first?.isUppercase == true,

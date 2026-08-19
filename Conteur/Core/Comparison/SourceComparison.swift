@@ -70,13 +70,22 @@ extension SourceComparison {
         !covered.isEmpty || !mentionedEntities.isEmpty
     }
 
+    /// Whether nothing beyond the scene-setting came through.
+    ///
+    /// The model credits the setting beat on the strength of a character being named — it did
+    /// so on every commentary sample in the corpus. Naming the people is not telling the
+    /// story, so coverage consisting only of setting is not coverage.
+    var narratedNothing: Bool {
+        !covered.isEmpty && covered.allSatisfy { $0.beat.component == .setting }
+    }
+
     /// They were talking about this story but told none of what happened in it.
     ///
     /// A real failure with a name — Labov's narrative clauses against free clauses. Somebody
     /// describing a story, guessing at it, or commenting on it is not narrating it, and
     /// because the cast was recognised this is a finding rather than an unknown.
     var talkedAroundIt: Bool {
-        covered.isEmpty && !mentionedEntities.isEmpty
+        (covered.isEmpty || narratedNothing) && !mentionedEntities.isEmpty
     }
 
     var coverageShare: Double {

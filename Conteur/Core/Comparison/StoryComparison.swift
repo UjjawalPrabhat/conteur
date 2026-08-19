@@ -18,6 +18,16 @@ protocol SourceComparing: Sendable {
 struct StoryComparison: SourceComparing {
     private static let options = GenerationOptions(sampling: .greedy)
 
+    /// The default guardrails refused six of fifteen scripted retellings, every faithful one
+    /// among them — a story where a mother dies reads as unsafe to a classifier that cannot
+    /// see it is fiction the app itself wrote. This is a transformation of supplied content,
+    /// not open generation, so the permissive setting is the accurate one.
+    private static let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+
+    /// A retelling cannot cover more events than it has words for. Measured against the
+    /// faithful samples, which run 25 to 35 words per event told.
+    private static let wordsPerClaimedEvent = 20
+
     private let matcher = SourceMatcher()
 
     func compare(_ transcript: Transcript, with story: GuidedStory) async throws -> SourceComparison {
@@ -28,7 +38,7 @@ struct StoryComparison: SourceComparing {
 
         // A quote that is not actually in the retelling is a fabrication and must never be
         // shown — but the beat is still covered. So the quote is dropped, not the coverage.
-        let covered = draft.mentions
+        let claimed = draft.mentions
             .filter(\.covered)
             .compactMap { mention -> BeatCoverage? in
                 guard let beat = story.beat(mention.beat) else { return nil }
@@ -39,26 +49,39 @@ struct StoryComparison: SourceComparing {
             }
             .sorted { ($0.at ?? .greatestFiniteMagnitude) < ($1.at ?? .greatestFiniteMagnitude) }
 
-        let coveredIDs = Set(covered.map(\.beat.id))
+        let plausible = Self.plausible(claimed, in: transcript)
+        let coveredIDs = Set(plausible.map(\.beat.id))
 
         return SourceComparison(
             story: story,
-            covered: covered,
+            covered: plausible,
             omitted: story.beats.filter { !coveredIDs.contains($0.id) },
             mentionedEntities: entities.mentioned,
             omittedEntities: entities.omitted,
             inventedNames: matcher.inventedNames(in: transcript, from: story),
-            orderAccuracy: matcher.orderAccuracy(of: covered.filter(\.isLocated)),
+            orderAccuracy: matcher.orderAccuracy(of: plausible),
             compression: Double(transcript.words.count) / Double(max(story.wordCount, 1)),
             conveyedStakes: draft.conveyedStakes
         )
+    }
+
+    /// When a retelling stops early the model finishes the story from what it knows: one
+    /// sample told two events and was credited with all five. Claims it could not quote are
+    /// kept only up to what the retelling's length supports, since a located claim carries
+    /// its own evidence and an unlocated one carries none.
+    private static func plausible(_ covered: [BeatCoverage], in transcript: Transcript) -> [BeatCoverage] {
+        let located = covered.filter(\.isLocated)
+        let unlocated = covered.filter { !$0.isLocated }
+        let budget = transcript.words.count / wordsPerClaimedEvent - located.count
+        guard budget < unlocated.count else { return covered }
+        return located + unlocated.prefix(max(0, budget))
     }
 
     private func coverage(
         of transcript: Transcript,
         against story: GuidedStory
     ) async throws -> CoverageDraft {
-        let session = LanguageModelSession(instructions: Self.instructions)
+        let session = LanguageModelSession(model: Self.model, instructions: Self.instructions)
         return try await session.respond(
             to: Self.brief(transcript, story),
             generating: CoverageDraft.self,
@@ -85,8 +108,13 @@ struct StoryComparison: SourceComparing {
 
         For every numbered event, say whether their retelling covers it.
 
+        Answer for every event on the list, including the last one. Do not stop early.
+
         Covered means they conveyed that event in their own words. It does not have to
         match the wording. It does have to be there — if they did not tell it, say so.
+
+        Do not fill in the rest of the story from what you can guess. A retelling that stops
+        halfway covers only what it reached.
 
         When an event is covered, quote the words from their retelling that cover it.
         Copy the words exactly as they said them. Never write a quote they did not say.

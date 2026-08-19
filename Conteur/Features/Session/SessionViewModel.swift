@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import FoundationModels
 import Observation
 
 @MainActor
@@ -260,7 +261,14 @@ final class SessionViewModel {
         do {
             source = try await comparer.compare(transcript, with: story)
         } catch {
-            phase = .failed(error.localizedDescription)
+            // A guardrail refusal is not something the speaker did, and "Detected content
+            // likely to be unsafe" is not something to show somebody who just retold a story
+            // about a bereavement.
+            if case .guardrailViolation = error as? LanguageModelSession.GenerationError {
+                phase = .failed("I couldn't work through that one. Try telling it again.")
+            } else {
+                phase = .failed(error.localizedDescription)
+            }
             return
         }
         // Nothing recognisable at all — not an event, not a character. Scoring it would
