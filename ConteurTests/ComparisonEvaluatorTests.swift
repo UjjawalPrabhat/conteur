@@ -72,6 +72,15 @@ struct ComparisonEvaluatorTests {
         #expect(expecting.allSatisfy { $0.shape == .faithful })
     }
 
+    /// The pattern match this replaced tested an Optional and never fired, which is how nine
+    /// consecutive refusals were reported as zero refusals.
+    @Test func aRefusalIsRecognisedAsOne() {
+        struct Other: Error {}
+
+        #expect(Other().isGuardrailRefusal == false)
+        #expect(CancellationError().isGuardrailRefusal == false)
+    }
+
     @Test func everySampleNamesAStoryThatExists() {
         #expect(RetellingCorpus.all.allSatisfy { $0.story != nil })
     }

@@ -28,6 +28,15 @@ struct StoryComparison: SourceComparing {
     /// faithful samples, which run 25 to 35 words per event told.
     private static let wordsPerClaimedEvent = 20
 
+    /// Asked about every event at once, the model drops the tail of the list — it missed the
+    /// last three events of a seven-event story. Refusals also tracked prompt length, with the
+    /// short samples answered and the long ones refused. Smaller requests address both.
+    private static let eventsPerRequest = 3
+
+    /// Refusals are not reproducible: the same sample was answered on one run and refused on
+    /// the next. One retry is worth more than it costs.
+    private static let attempts = 2
+
     private let matcher = SourceMatcher()
 
     func compare(_ transcript: Transcript, with story: GuidedStory) async throws -> SourceComparison {
@@ -80,21 +89,62 @@ struct StoryComparison: SourceComparing {
     private func coverage(
         of transcript: Transcript,
         against story: GuidedStory
-    ) async throws -> CoverageDraft {
-        let session = LanguageModelSession(model: Self.model, instructions: Self.instructions)
-        return try await session.respond(
-            to: Self.brief(transcript, story),
-            generating: CoverageDraft.self,
-            options: Self.options
-        ).content
+    ) async throws -> (mentions: [BeatMention], conveyedStakes: Bool) {
+        var mentions: [BeatMention] = []
+
+        for batch in story.beats.chunks(of: Self.eventsPerRequest) {
+            // A batch that will not answer is thrown rather than treated as uncovered: an
+            // unanswered event reported as an omission blames the speaker for a refusal.
+            let draft = try await attempting {
+                let session = LanguageModelSession(
+                    model: Self.model,
+                    instructions: Self.coverageInstructions
+                )
+                return try await session.respond(
+                    to: Self.brief(transcript, batch),
+                    generating: CoverageDraft.self,
+                    options: Self.options
+                ).content
+            }
+            mentions.append(contentsOf: draft.mentions)
+        }
+
+        let stakes = try await attempting {
+            let session = LanguageModelSession(
+                model: Self.model,
+                instructions: Self.stakesInstructions
+            )
+            return try await session.respond(
+                to: Self.stakesBrief(transcript, story),
+                generating: StakesDraft.self,
+                options: Self.options
+            ).content
+        }
+
+        return (mentions, stakes.conveyed)
     }
 
-    private static func brief(_ transcript: Transcript, _ story: GuidedStory) -> String {
-        """
-        THE STORY'S EVENTS
-        \(story.beats.map { "\($0.id). \($0.summary)" }.joined(separator: "\n"))
+    private func attempting<T>(_ work: () async throws -> T) async throws -> T {
+        var lastError: any Error = CancellationError()
+        for _ in 0..<Self.attempts {
+            do { return try await work() } catch { lastError = error }
+        }
+        throw lastError
+    }
 
-        WHY IT MATTERED
+    private static func brief(_ transcript: Transcript, _ events: [CanonicalBeat]) -> String {
+        """
+        EVENTS FROM THE STORY
+        \(events.map { "\($0.id). \($0.summary)" }.joined(separator: "\n"))
+
+        WHAT THEY SAID
+        \(transcript.text)
+        """
+    }
+
+    private static func stakesBrief(_ transcript: Transcript, _ story: GuidedStory) -> String {
+        """
+        THE POINT OF THE STORY
         \(story.stakes)
 
         WHAT THEY SAID
@@ -102,39 +152,45 @@ struct StoryComparison: SourceComparing {
         """
     }
 
-    private static let instructions = """
-        Somebody read a short story and then retold it from memory. You are given the
-        story's events as a numbered list, and what they actually said.
+    private static let coverageInstructions = """
+        Somebody read a short story and then retold it from memory. You are given some of the
+        story's events, numbered, and what they actually said.
 
-        For every numbered event, say whether their retelling covers it.
+        Answer for every event you are given, including the last one.
 
-        Answer for every event on the list, including the last one. Do not stop early.
+        Covered means they conveyed that event in their own words. It does not have to match
+        the wording. It does have to be there — if they did not tell it, say so.
 
-        Covered means they conveyed that event in their own words. It does not have to
-        match the wording. It does have to be there — if they did not tell it, say so.
+        Do not fill in the story from what you can guess. A retelling that stops early covers
+        only what it reached, and somebody who merely names a character has not told an event.
 
-        Do not fill in the rest of the story from what you can guess. A retelling that stops
-        halfway covers only what it reached.
+        When an event is covered, quote the words from their retelling that cover it. Copy the
+        words exactly as they said them. Never write a quote they did not say.
+        """
 
-        When an event is covered, quote the words from their retelling that cover it.
-        Copy the words exactly as they said them. Never write a quote they did not say.
+    private static let stakesInstructions = """
+        Somebody read a short story and then retold it from memory. You are given the point of
+        the story and what they said.
 
-        Then say whether they got across why the story mattered, as described above.
-        Recounting the events is not enough on its own.
+        Say only whether they got that point across. Recounting what happened is not enough on
+        its own — the point has to come through.
         """
 }
 
 @Generable
 private struct CoverageDraft {
-    @Guide(description: "One entry for every numbered event in the story, in order.")
+    @Guide(description: "One entry for every event you were given, in order.")
     var mentions: [BeatMention]
-
-    @Guide(description: "True only if they conveyed why the story mattered, not just what happened.")
-    var conveyedStakes: Bool
 }
 
 @Generable
-private struct BeatMention {
+private struct StakesDraft {
+    @Guide(description: "True only if the point of the story came through, not just the events.")
+    var conveyed: Bool
+}
+
+@Generable
+fileprivate struct BeatMention {
     @Guide(description: "The number of the event.")
     var beat: Int
 

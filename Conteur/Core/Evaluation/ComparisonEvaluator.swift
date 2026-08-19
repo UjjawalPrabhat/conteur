@@ -59,11 +59,11 @@ struct EvaluationSummary: Sendable {
 
     /// The worst failure mode: crediting the speaker with events they never told.
     var totalFalsePositives: Int {
-        scores.reduce(0) { $0 + $1.falsePositives.count }
+        answered.reduce(0) { $0 + $1.falsePositives.count }
     }
 
     var totalFalseNegatives: Int {
-        scores.reduce(0) { $0 + $1.falseNegatives.count }
+        answered.reduce(0) { $0 + $1.falseNegatives.count }
     }
 
     var failures: [SampleScore] { scores.filter { $0.failure != nil } }
@@ -123,19 +123,16 @@ struct ComparisonEvaluator: Sendable {
                 wasRefused: false
             )
         } catch {
-            let refused: Bool
-            if case .guardrailViolation = error as? LanguageModelSession.GenerationError {
-                refused = true
-            } else {
-                refused = false
-            }
+            let refused = error.isGuardrailRefusal
             return SampleScore(
                 sample: sample,
                 reported: [],
                 located: [],
                 inventedNames: [],
                 conveyedStakes: false,
-                failure: refused ? "refused by the guardrail" : error.localizedDescription,
+                failure: refused
+                    ? "refused by the guardrail"
+                    : error.localizedDescription,
                 wasRefused: refused
             )
         }
