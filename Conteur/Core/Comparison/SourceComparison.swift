@@ -73,6 +73,31 @@ extension SourceComparison {
         compression > GuidedStory.recallRatio.upperBound * 1.6
     }
 
+    var climaxCoverage: BeatCoverage? {
+        covered.first { $0.beat.isClimax }
+    }
+
+    /// When a covered beat was told, from the moment it was mentioned to the moment the
+    /// next one was. Used to check pace and expression at the point that mattered.
+    func span(of coverage: BeatCoverage, endingBy end: TimeInterval) -> Range<TimeInterval> {
+        let next = covered.first { $0.at > coverage.at }?.at ?? end
+        return coverage.at..<max(coverage.at + 0.5, next)
+    }
+
+    /// Events told without the event that caused them — the listener got an effect with no
+    /// cause, which is a coherence failure the story itself rules on.
+    var uncausedEvents: [(told: CanonicalBeat, missingCause: CanonicalBeat)] {
+        let told = Set(covered.map(\.beat.id))
+        return covered.compactMap { coverage in
+            guard
+                let causeID = coverage.beat.causedBy,
+                !told.contains(causeID),
+                let cause = story.beat(causeID)
+            else { return nil }
+            return (coverage.beat, cause)
+        }
+    }
+
     /// Causal links the story had between two beats the reteller covered — if both ends
     /// were told, the link between them was tellable.
     var tellableCausalLinks: [(cause: CanonicalBeat, effect: CanonicalBeat)] {

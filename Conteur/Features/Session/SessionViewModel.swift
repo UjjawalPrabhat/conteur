@@ -15,12 +15,13 @@ final class SessionViewModel {
         case failed(String)
     }
 
-    /// Each chunk costs a model session, and the whole beat sheet has to fit one 4,096
-    /// token budget at the reduce step. Ten minutes is about twenty chunks — enough for
-    /// a full retelling, short enough that the analysis after you stop stays brief.
-    static let maximumDuration: TimeInterval = 10 * 60
+    /// Retelling a 350-word story should take about a minute: adults recall a third to a
+    /// half of a narrative's length, at around 150 words a minute of narrative speech.
+    /// Three minutes is generous room over that, and the comparison's reliability falls off
+    /// well before the token budget would.
+    static let maximumDuration: TimeInterval = 3 * 60
     /// The last stretch, where the speaker is told to start drawing to a close.
-    static let warningDuration: TimeInterval = 60
+    static let warningDuration: TimeInterval = 30
 
     /// Below this there is nothing to say. Saying it anyway means inventing it.
     private static let minimumWords = 40
@@ -45,7 +46,7 @@ final class SessionViewModel {
     var isRunningOut: Bool { phase == .listening && remaining <= Self.warningDuration }
 
     private let transcriber: any Transcribing
-    private let narrative: any NarrativeAnalyzing
+    private let comparer: any SourceComparing
     private let diagnosing: any Diagnosing
     private let composing: any FeedbackComposing
     private let speech: any Speaking
@@ -57,8 +58,8 @@ final class SessionViewModel {
     private let expressivity = ExpressivityAnalyzer()
     private let reader = ExpressionReader()
     private var neutral = ExpressionBaseline()
-    private let chunker = TranscriptChunker()
 
+    private let story: GuidedStory
     private var baseline: Baseline = .none
     private var history: Band?
     /// The first telling, when this is the retell against a challenge.
@@ -69,20 +70,20 @@ final class SessionViewModel {
     private var transcript = Transcript.empty
     private var frames: [ProsodyFrame] = []
     private var expressions: [ExpressionSample] = []
-    private var beats: [Beat] = []
-    private var labelledChunks = 0
     private var session: Task<Void, Never>?
     private var quietSince: TimeInterval?
 
     init(
+        story: GuidedStory,
         transcriber: any Transcribing = SpeechTranscription(),
-        narrative: any NarrativeAnalyzing = OnDeviceNarrativeAnalyzer(),
+        comparer: any SourceComparing = StoryComparison(),
         diagnosing: any Diagnosing = RuleBasedDiagnosis(),
         composing: any FeedbackComposing = OnDeviceComposer(),
         speech: any Speaking = SystemSpeech()
     ) {
         self.transcriber = transcriber
-        self.narrative = narrative
+        self.story = story
+        self.comparer = comparer
         self.diagnosing = diagnosing
         self.composing = composing
         self.speech = speech
@@ -153,7 +154,6 @@ final class SessionViewModel {
         do {
             for try await update in transcriber.transcribe(chunks) {
                 transcript = update
-                await labelSettledChunks()
             }
         } catch {
             phase = .failed(error.localizedDescription)
@@ -209,22 +209,6 @@ final class SessionViewModel {
 
     // MARK: - Analysis
 
-    /// Labels every chunk except the one still being spoken, so most of the map step is
-    /// already done by the time the speaker stops.
-    private func labelSettledChunks() async {
-        let chunks = chunker.chunks(of: transcript)
-        guard chunks.count > labelledChunks + 1 else { return }
-
-        for chunk in chunks[labelledChunks..<(chunks.count - 1)] {
-            // Advance regardless of outcome: a chunk the model declines must not be
-            // retried on every subsequent transcript update.
-            labelledChunks += 1
-            if let beat = try? await narrative.label(chunk) {
-                beats.append(beat)
-            }
-        }
-    }
-
     private func respond() async throws {
         // Analysing a handful of words does not produce weak feedback, it produces
         // invented feedback: the model fills the summary it is asked for, and every
@@ -238,26 +222,18 @@ final class SessionViewModel {
         }
         phase = .reading
 
-        let chunks = chunker.chunks(of: transcript)
-        for chunk in chunks.dropFirst(labelledChunks) {
-            labelledChunks += 1
-            if let beat = try? await narrative.label(chunk) {
-                beats.append(beat)
-            }
-        }
-
-        let narrativeReading = NarrativeReading(
-            beats: beats,
-            arc: (try? await narrative.arc(from: beats)) ?? NarrativeReading.empty.arc
-        )
         let timeline = FeatureTimeline(
             transcript: transcript,
             delivery: delivery.analyze(transcript),
             prosody: frames,
             expressivity: expressivity.windows(from: expressions)
         )
+        // One comparison against the story, in one model session. The whole map-reduce
+        // existed only because structure had to be inferred with nothing to compare to.
+        let source = (try? await comparer.compare(transcript, with: story))
+            ?? .nothing(for: story)
         let diagnosis = diagnosing.diagnose(
-            DiagnosticInput(timeline: timeline, narrative: narrativeReading),
+            DiagnosticInput(timeline: timeline, comparison: source),
             against: baseline
         )
         let progress = previous.flatMap { first in
@@ -272,7 +248,7 @@ final class SessionViewModel {
         assessment = Assessment(
             recordedAt: .now,
             timeline: timeline,
-            narrative: narrativeReading,
+            comparison: source,
             diagnosis: diagnosis,
             feedback: feedback,
             progress: progress
@@ -292,8 +268,6 @@ final class SessionViewModel {
         expressions = []
         neutral = ExpressionBaseline()
         elapsed = 0
-        beats = []
-        labelledChunks = 0
         assessment = nil
         level = 0
         isAttending = false

@@ -11,3 +11,9 @@ extension TimeInterval {
         "\(Int(rounded()))s"
     }
 }
+
+extension Double {
+    var percentLabel: String {
+        formatted(.percent.precision(.fractionLength(0)))
+    }
+}

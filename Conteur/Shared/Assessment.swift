@@ -5,7 +5,7 @@ import Foundation
 struct Assessment: Sendable {
     let recordedAt: Date
     let timeline: FeatureTimeline
-    let narrative: NarrativeReading
+    let comparison: SourceComparison
     let diagnosis: Diagnosis
     let feedback: Feedback?
     /// Present only on a second telling.

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SessionView: View {
+    let story: GuidedStory
     let challenge: String?
     let baseline: Baseline
     let history: Band?
@@ -8,7 +9,27 @@ struct SessionView: View {
     @Binding var isTelling: Bool
     let onFinish: (Assessment) -> Void
 
-    @State private var model = SessionViewModel()
+    @State private var model: SessionViewModel
+
+    init(
+        story: GuidedStory,
+        challenge: String?,
+        baseline: Baseline,
+        history: Band?,
+        previous: Diagnosis?,
+        isTelling: Binding<Bool>,
+        onFinish: @escaping (Assessment) -> Void
+    ) {
+        self.story = story
+        self.challenge = challenge
+        self.baseline = baseline
+        self.history = history
+        self.previous = previous
+        _isTelling = isTelling
+        self.onFinish = onFinish
+        _model = State(initialValue: SessionViewModel(story: story))
+    }
+
 
     var body: some View {
         ZStack {
@@ -83,7 +104,7 @@ struct SessionView: View {
     private var invitation: String {
         switch model.phase {
         case .ready:
-            challenge ?? "Tell me about what you just read."
+            challenge ?? "Tell me \"\(story.title)\" back, in your own words."
         case .preparing: "One moment."
         case .listening: "I'm listening. Take your time."
         case .reading: "Thinking about how you told it."

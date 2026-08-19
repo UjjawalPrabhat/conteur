@@ -133,6 +133,7 @@ private struct TemplateComposer {
         case .relevance: "Tell it again, and keep only what the story turns on."
         case .engagement: "Tell it again, and say out loud why each turn mattered."
         case .delivery: "Tell it again, and let the silences do some of the work."
+        case .fidelity: "Tell it again, and stay with the story as it was written."
         }
     }
 }

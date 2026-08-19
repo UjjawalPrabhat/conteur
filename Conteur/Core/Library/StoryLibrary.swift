@@ -114,7 +114,8 @@ extension StoryLibrary {
                 summary: "The water goes still and everything he gained is taken back — the boats, the food, all of it",
                 loadBearing: true,
                 entities: ["Aren", "the silver fish"],
-                causedBy: 5
+                causedBy: 5,
+                isClimax: true
             ),
             CanonicalBeat(
                 id: 7,
@@ -227,7 +228,8 @@ extension StoryLibrary {
                 summary: "Nadia realises she must either throw them away and keep the family as it was, or call Cork and make a stranger into an aunt",
                 loadBearing: true,
                 entities: ["Nadia", "Rosalind"],
-                causedBy: 3
+                causedBy: 3,
+                isClimax: true
             ),
             CanonicalBeat(
                 id: 5,
@@ -344,7 +346,8 @@ extension StoryLibrary {
                 summary: "The door is a lost property office — he is a volunteer who has spent six years returning cases to the people who lost them",
                 loadBearing: true,
                 entities: ["Priya", "the man in the grey overcoat", "the crying woman", "the briefcases"],
-                causedBy: 4
+                causedBy: 4,
+                isClimax: true
             ),
             CanonicalBeat(
                 id: 6,

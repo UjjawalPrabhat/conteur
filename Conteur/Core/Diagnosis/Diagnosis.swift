@@ -6,6 +6,9 @@ enum Dimension: String, Sendable, Hashable, CaseIterable, Codable {
     case relevance
     case engagement
     case delivery
+    /// Whether they told the story that was actually there. Only measurable because the
+    /// app supplied the story — there is nothing to be unfaithful to otherwise.
+    case fidelity
 
     var title: String {
         rawValue.capitalized

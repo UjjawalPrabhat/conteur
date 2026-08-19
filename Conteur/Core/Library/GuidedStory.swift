@@ -1,5 +1,16 @@
 import Foundation
 
+enum StoryComponent: String, Sendable, Hashable, CaseIterable, Codable {
+    case setting
+    case initiatingEvent
+    case goal
+    case conflict
+    case attempts
+    case consequences
+    case resolution
+
+}
+
 /// Genre sets what a listener expects to hear back, so it replaces the shape the model
 /// used to have to infer from the retelling itself.
 enum Genre: String, Sendable, Codable, Hashable, CaseIterable {
@@ -58,6 +69,27 @@ struct CanonicalBeat: Sendable, Codable, Hashable, Identifiable {
     let entities: [String]
     /// The beat that caused this one, if any.
     let causedBy: Int?
+    /// The moment the story turns on. Authored rather than guessed, so pace and
+    /// expression can be checked at exactly the point that deserved room.
+    let isClimax: Bool
+
+    init(
+        id: Int,
+        component: StoryComponent,
+        summary: String,
+        loadBearing: Bool,
+        entities: [String],
+        causedBy: Int?,
+        isClimax: Bool = false
+    ) {
+        self.id = id
+        self.component = component
+        self.summary = summary
+        self.loadBearing = loadBearing
+        self.entities = entities
+        self.causedBy = causedBy
+        self.isClimax = isClimax
+    }
 }
 
 struct GuidedStory: Sendable, Codable, Hashable, Identifiable {
@@ -104,6 +136,10 @@ extension GuidedStory {
 
     var loadBearingBeats: [CanonicalBeat] {
         beats.filter(\.loadBearing)
+    }
+
+    var climax: CanonicalBeat? {
+        beats.first(where: \.isClimax)
     }
 
     var centralCast: [StoryEntity] {

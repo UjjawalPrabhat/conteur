@@ -1,20 +1,23 @@
 import SwiftData
 import SwiftUI
 
-/// Owns the loop: tell it, hear how you told it, tell it again, see what changed.
+/// Owns the loop: pick a story, read it, tell it back, hear how you told it, tell it again.
 ///
 /// Every telling ends on the feedback screen — a second one simply shows what changed at
-/// the top of it. That keeps the loop open past two attempts, and means no telling can
-/// ever end without feedback.
+/// the top of it. That keeps the loop open past two attempts, and means no telling can ever
+/// end without feedback.
 struct TellFlowView: View {
     private enum Stage: Equatable {
+        case choosing
+        case reading
         case telling
         case feedback
     }
 
     @Environment(\.modelContext) private var context
 
-    @State private var stage: Stage = .telling
+    @State private var stage: Stage = .choosing
+    @State private var story: GuidedStory?
     @State private var group = UUID()
     @State private var attempt = 1
     @State private var previous: Assessment?
@@ -22,17 +25,32 @@ struct TellFlowView: View {
     @State private var isTelling = false
 
     var body: some View {
-        content
-            // The tab bar is a distraction while somebody is mid-story, so it goes
-            // away for the telling and comes back afterwards.
-            .toolbar(isTelling ? .hidden : .automatic, for: .tabBar)
+        NavigationStack {
+            content
+        }
+        // The tab bar is a distraction while somebody is mid-story, so it goes away for
+        // the telling and comes back afterwards.
+        .toolbar(isTelling ? .hidden : .automatic, for: .tabBar)
     }
 
     @ViewBuilder
     private var content: some View {
         switch stage {
+        case .choosing:
+            StoryPickerView { chosen in
+                story = chosen
+                stage = .reading
+            }
+
+        case .reading:
+            if let story {
+                ReadingView(story: story) { stage = .telling }
+            }
+
         case .telling:
-            session
+            if let story {
+                session(story)
+            }
 
         case .feedback:
             if let current {
@@ -45,10 +63,11 @@ struct TellFlowView: View {
         }
     }
 
-    private var session: some View {
+    private func session(_ story: GuidedStory) -> some View {
         let store = SwiftDataRetellingStore(context: context)
 
         return SessionView(
+            story: story,
             challenge: previous?.feedback?.challenge,
             baseline: store.baseline(),
             history: previous?.focus.flatMap { store.lastBand(for: $0) },
@@ -64,6 +83,8 @@ struct TellFlowView: View {
         .id(attempt)
     }
 
+    /// The same story, told again against the challenge. The story is not shown a second
+    /// time — the point is what they retained and how they told it, not re-reading.
     private func retell() {
         previous = current
         current = nil
@@ -75,9 +96,10 @@ struct TellFlowView: View {
     private func restart() {
         previous = nil
         current = nil
+        story = nil
         attempt = 1
         group = UUID()
         isTelling = false
-        stage = .telling
+        stage = .choosing
     }
 }
