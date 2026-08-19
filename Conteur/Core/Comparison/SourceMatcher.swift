@@ -60,7 +60,11 @@ struct SourceMatcher: Sendable {
 
     /// Fraction of covered beat pairs told in the story's own order. A concordant-pair
     /// measure, so six beats with one displaced scores far better than six told backwards.
+    ///
+    /// Only located coverages can be ordered — a beat known to be covered but not to be
+    /// placed says nothing about sequence.
     func orderAccuracy(of covered: [BeatCoverage]) -> Double {
+        let covered = covered.filter(\.isLocated).sorted { ($0.at ?? 0) < ($1.at ?? 0) }
         guard covered.count >= 2 else { return 1 }
 
         var concordant = 0

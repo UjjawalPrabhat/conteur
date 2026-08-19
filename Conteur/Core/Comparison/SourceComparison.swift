@@ -1,10 +1,17 @@
 import Foundation
 
-/// Where in the retelling a canonical beat was covered.
+/// A canonical beat the retelling covered, and where — when that can be established.
+///
+/// The location is optional on purpose. The model is asked to copy the words that cover a
+/// beat, and a small model often paraphrases instead. Its judgement that the beat *was*
+/// covered is still usable; only the pointer into the recording is lost. Discarding the
+/// whole coverage over an unquotable quote turned told beats into omissions.
 struct BeatCoverage: Sendable, Hashable {
     let beat: CanonicalBeat
-    let quote: String
-    let at: TimeInterval
+    let quote: String?
+    let at: TimeInterval?
+
+    var isLocated: Bool { at != nil }
 }
 
 /// A retelling measured against the story it came from.
@@ -73,15 +80,27 @@ extension SourceComparison {
         compression > GuidedStory.recallRatio.upperBound * 1.6
     }
 
+    /// Coverages that can be pointed at, in the order they were spoken.
+    var located: [BeatCoverage] {
+        covered.filter(\.isLocated).sorted { ($0.at ?? 0) < ($1.at ?? 0) }
+    }
+
     var climaxCoverage: BeatCoverage? {
         covered.first { $0.beat.isClimax }
+    }
+
+    /// The turning point, only when the moment it was told is known — the pace and
+    /// expression rules need a time, not just the knowledge that it was covered.
+    var locatedClimax: BeatCoverage? {
+        located.first { $0.beat.isClimax }
     }
 
     /// When a covered beat was told, from the moment it was mentioned to the moment the
     /// next one was. Used to check pace and expression at the point that mattered.
     func span(of coverage: BeatCoverage, endingBy end: TimeInterval) -> Range<TimeInterval> {
-        let next = covered.first { $0.at > coverage.at }?.at ?? end
-        return coverage.at..<max(coverage.at + 0.5, next)
+        guard let start = coverage.at else { return 0..<end }
+        let next = located.first { ($0.at ?? 0) > start }?.at ?? end
+        return start..<max(start + 0.5, next)
     }
 
     /// Events told without the event that caused them — the listener got an effect with no

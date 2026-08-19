@@ -43,6 +43,10 @@ final class SessionViewModel {
 
     private(set) var elapsed: TimeInterval = 0
 
+    /// What the transcriber actually heard. Shown when the retelling could not be matched,
+    /// because the first thing worth knowing is whether the words arrived at all.
+    var heard: String { transcript.text }
+
     var remaining: TimeInterval { max(0, Self.maximumDuration - elapsed) }
     var isRunningOut: Bool { phase == .listening && remaining <= Self.warningDuration }
 
@@ -249,8 +253,16 @@ final class SessionViewModel {
         )
         // One comparison against the story, in one model session. The whole map-reduce
         // existed only because structure had to be inferred with nothing to compare to.
-        let source = (try? await comparer.compare(transcript, with: story))
-            ?? .nothing(for: story)
+        //
+        // A thrown error is reported rather than degraded into an empty comparison: those
+        // look identical downstream, and "nothing matched" would be blamed on the speaker.
+        let source: SourceComparison
+        do {
+            source = try await comparer.compare(transcript, with: story)
+        } catch {
+            phase = .failed(error.localizedDescription)
+            return
+        }
         // Nothing in the retelling could be matched to the story. Scoring it would mean
         // guessing whether they told a different story or the matching simply failed.
         guard !source.covered.isEmpty else {

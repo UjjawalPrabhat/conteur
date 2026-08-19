@@ -37,19 +37,20 @@ final class FeedbackViewModel {
         guard !transcript.words.isEmpty else { return [] }
 
         let end = (transcript.words.last?.end ?? 0) + 0.01
-        let covered = assessment.comparison.covered
+        let covered = assessment.comparison.located
         guard !covered.isEmpty else {
             return [Passage(start: 0, end: end, beat: nil, text: transcript.text)]
         }
 
         var passages: [Passage] = []
         // Anything said before the first recognised event still belongs to the retelling.
-        if let opening = covered.first, opening.at > 0 {
-            passages.append(passage(from: 0, to: opening.at, beat: nil))
+        if let first = covered.first?.at, first > 0 {
+            passages.append(passage(from: 0, to: first, beat: nil))
         }
         for (index, coverage) in covered.enumerated() {
-            let next = index + 1 < covered.count ? covered[index + 1].at : end
-            passages.append(passage(from: coverage.at, to: next, beat: coverage.beat))
+            guard let start = coverage.at else { continue }
+            let next = index + 1 < covered.count ? (covered[index + 1].at ?? end) : end
+            passages.append(passage(from: start, to: next, beat: coverage.beat))
         }
         return passages.filter { !$0.text.isEmpty }
     }

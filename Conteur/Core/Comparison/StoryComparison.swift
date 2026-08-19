@@ -24,20 +24,20 @@ struct StoryComparison: SourceComparing {
         guard !transcript.words.isEmpty else { return .nothing(for: story) }
 
         let entities = matcher.entities(in: transcript, from: story)
-        let draft = try? await coverage(of: transcript, against: story)
+        let draft = try await coverage(of: transcript, against: story)
 
-        // A quote the model produced that is not actually in the retelling is a
-        // fabrication, and dropping it here is what keeps one out of the feedback.
-        let covered = (draft?.mentions ?? [])
+        // A quote that is not actually in the retelling is a fabrication and must never be
+        // shown — but the beat is still covered. So the quote is dropped, not the coverage.
+        let covered = draft.mentions
             .filter(\.covered)
             .compactMap { mention -> BeatCoverage? in
-                guard
-                    let beat = story.beat(mention.beat),
-                    let at = transcript.locate(mention.quote)
-                else { return nil }
+                guard let beat = story.beat(mention.beat) else { return nil }
+                guard let at = transcript.locate(mention.quote) else {
+                    return BeatCoverage(beat: beat, quote: nil, at: nil)
+                }
                 return BeatCoverage(beat: beat, quote: mention.quote, at: at)
             }
-            .sorted { $0.at < $1.at }
+            .sorted { ($0.at ?? .greatestFiniteMagnitude) < ($1.at ?? .greatestFiniteMagnitude) }
 
         let coveredIDs = Set(covered.map(\.beat.id))
 
@@ -48,9 +48,9 @@ struct StoryComparison: SourceComparing {
             mentionedEntities: entities.mentioned,
             omittedEntities: entities.omitted,
             inventedNames: matcher.inventedNames(in: transcript, from: story),
-            orderAccuracy: matcher.orderAccuracy(of: covered),
+            orderAccuracy: matcher.orderAccuracy(of: covered.filter(\.isLocated)),
             compression: Double(transcript.words.count) / Double(max(story.wordCount, 1)),
-            conveyedStakes: draft?.conveyedStakes ?? false
+            conveyedStakes: draft.conveyedStakes
         )
     }
 

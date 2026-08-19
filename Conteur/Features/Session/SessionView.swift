@@ -69,6 +69,19 @@ struct SessionView: View {
                         .padding(.top, 10)
                 }
 
+                if !model.heard.isEmpty, showsWhatWasHeard {
+                    ScrollView {
+                        Text(model.heard)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 160)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 12)
+                }
+
                 if model.isRunningOut {
                     Text("About \(Int(model.remaining.rounded())) seconds left — start drawing it to a close.")
                         .font(.footnote)
@@ -129,6 +142,15 @@ struct SessionView: View {
         }
     }
 
+    /// After a retelling that could not be used, what was heard is the only thing that
+    /// explains why — whether the words arrived wrong or arrived and were not recognised.
+    private var showsWhatWasHeard: Bool {
+        switch model.phase {
+        case .unmatched, .tooShort, .failed: true
+        case .ready, .preparing, .listening, .reading, .responding: false
+        }
+    }
+
     private var invitation: String {
         switch model.phase {
         case .ready, .preparing: "One moment."
@@ -138,7 +160,7 @@ struct SessionView: View {
         case .tooShort:
             "That was too short for me to say anything useful. Tell me a bit more of it."
         case .unmatched:
-            "I couldn't match any of that to \"\(story.title)\". Try telling me what happened in it."
+            "I heard you, but I couldn't line any of it up with \"\(story.title)\"."
         case .failed(let message): message
         }
     }

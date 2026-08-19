@@ -99,6 +99,31 @@ struct RuleBasedDiagnosisTests {
         #expect(engagement?.findings.contains { $0.subject == "stakes" } == true)
     }
 
+    /// A beat the model judged covered but paraphrased instead of quoting used to be
+    /// discarded, which turned a told story into a total omission.
+    @Test func aBeatCoveredWithoutAQuotableQuoteStillCounts() {
+        let everything = Fixture.story.beats.map(\.id)
+        let paraphrased = Fixture.comparison(told: everything, unlocated: Set(everything))
+        let input = Fixture.input(paraphrased)
+
+        let result = diagnosis.diagnose(input, against: .none)
+
+        #expect(paraphrased.covered.count == everything.count)
+        #expect(paraphrased.located.isEmpty)
+        #expect(result.assessment(for: .structure)?.findings.isEmpty == true)
+        #expect(result.assessment(for: .fidelity)?.findings.isEmpty == true)
+    }
+
+    /// Sequence needs placed events, so an unplaced coverage must not be read as disorder.
+    @Test func orderIsNotJudgedWithoutPlacedEvents() {
+        let everything = Fixture.story.beats.map(\.id)
+        let input = Fixture.input(Fixture.comparison(told: everything, unlocated: Set(everything)))
+
+        let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
+
+        #expect(coherence?.findings.contains { $0.subject == "order" } == false)
+    }
+
     // MARK: - Fidelity
 
     @Test func aCharacterTheStoryNeverHadIsAFidelityFinding() {

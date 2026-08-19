@@ -61,8 +61,10 @@ struct SequenceAccuracyRule: DiagnosticRule {
 
     let dimension = Dimension.coherence
 
+    /// Order needs placed events. A beat known to be covered but not located says nothing
+    /// about sequence.
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.comparison.covered.count >= 3
+        input.comparison.located.count >= 3
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
@@ -76,7 +78,7 @@ struct SequenceAccuracyRule: DiagnosticRule {
                 observation: "events came out in a different order from the story's",
                 magnitude: 1 - accuracy,
                 weight: 0.3,
-                evidence: input.comparison.covered.prefix(3).map {
+                evidence: input.comparison.located.prefix(3).map {
                     Evidence(at: $0.at, quote: $0.quote, measure: nil)
                 }
             )

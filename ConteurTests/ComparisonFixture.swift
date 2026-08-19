@@ -35,6 +35,7 @@ enum Fixture {
     static func comparison(
         story: GuidedStory = Fixture.story,
         told: [Int],
+        unlocated: Set<Int> = [],
         mentioning: [String]? = nil,
         inventing: [String] = [],
         conveyedStakes: Bool = true,
@@ -42,6 +43,9 @@ enum Fixture {
     ) -> SourceComparison {
         let covered = told.enumerated().compactMap { index, id -> BeatCoverage? in
             guard let beat = story.beat(id) else { return nil }
+            guard !unlocated.contains(id) else {
+                return BeatCoverage(beat: beat, quote: nil, at: nil)
+            }
             return BeatCoverage(beat: beat, quote: "word\(index)", at: Double(index) * 3)
         }
         let coveredIDs = Set(covered.map(\.beat.id))

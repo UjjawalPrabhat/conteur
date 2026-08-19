@@ -126,13 +126,14 @@ struct FlatClimaxRule: DiagnosticRule {
     let dimension = Dimension.engagement
 
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.comparison.climaxCoverage != nil && !input.timeline.expressivity.isEmpty
+        input.comparison.locatedClimax != nil && !input.timeline.expressivity.isEmpty
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
         guard
-            let climax = input.comparison.climaxCoverage,
-            let variation = input.timeline.expressivity(at: climax.at),
+            let climax = input.comparison.locatedClimax,
+            let at = climax.at,
+            let variation = input.timeline.expressivity(at: at),
             variation < Self.stillness
         else { return [] }
 
@@ -140,10 +141,10 @@ struct FlatClimaxRule: DiagnosticRule {
             Finding(
                 dimension: dimension,
                 subject: "climax-expression",
-                observation: "your face stayed still through the turning point at \(climax.at.timestampLabel)",
+                observation: "your face stayed still through the turning point at \(at.timestampLabel)",
                 magnitude: Double(Self.stillness - variation),
                 weight: 0.25,
-                evidence: [.at(climax.at, quote: climax.quote)]
+                evidence: [.at(at, quote: climax.quote)]
             )
         ]
     }
@@ -157,11 +158,11 @@ struct RushedClimaxRule: DiagnosticRule {
     let dimension = Dimension.delivery
 
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.comparison.climaxCoverage != nil && input.timeline.delivery.wordsPerMinute > 0
+        input.comparison.locatedClimax != nil && input.timeline.delivery.wordsPerMinute > 0
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
-        guard let climax = input.comparison.climaxCoverage else { return [] }
+        guard let climax = input.comparison.locatedClimax, let at = climax.at else { return [] }
 
         let average = input.timeline.delivery.wordsPerMinute
         let span = input.comparison.span(of: climax, endingBy: input.timeline.duration)
@@ -175,7 +176,7 @@ struct RushedClimaxRule: DiagnosticRule {
                 observation: "you sped up to \(Int(local)) words a minute through the turning point, against \(Int(average)) across the rest",
                 magnitude: local / average,
                 weight: 0.25,
-                evidence: [.at(climax.at, quote: climax.quote, measure: "\(Int(local)) wpm")]
+                evidence: [.at(at, quote: climax.quote, measure: "\(Int(local)) wpm")]
             )
         ]
     }

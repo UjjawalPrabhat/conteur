@@ -137,7 +137,7 @@ struct SourceMatcherTests {
         beatIDs.enumerated().map { index, id in
             BeatCoverage(
                 beat: story.beat(id) ?? story.beats[0],
-                quote: "",
+                quote: "word",
                 at: Double(index)
             )
         }
