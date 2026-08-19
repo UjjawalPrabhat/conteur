@@ -64,6 +64,21 @@ extension SourceComparison {
         Set(omittedLoadBearing.map(\.component)).subtracting(covered.map(\.beat.component))
     }
 
+    /// Whether anything in the retelling was recognisably about this story. Entities match
+    /// on plain text, so this holds even when no event was recognised.
+    var recognisedSomething: Bool {
+        !covered.isEmpty || !mentionedEntities.isEmpty
+    }
+
+    /// They were talking about this story but told none of what happened in it.
+    ///
+    /// A real failure with a name — Labov's narrative clauses against free clauses. Somebody
+    /// describing a story, guessing at it, or commenting on it is not narrating it, and
+    /// because the cast was recognised this is a finding rather than an unknown.
+    var talkedAroundIt: Bool {
+        covered.isEmpty && !mentionedEntities.isEmpty
+    }
+
     var coverageShare: Double {
         guard !story.loadBearingBeats.isEmpty else { return 1 }
         let hit = covered.filter(\.beat.loadBearing).count

@@ -263,9 +263,10 @@ final class SessionViewModel {
             phase = .failed(error.localizedDescription)
             return
         }
-        // Nothing in the retelling could be matched to the story. Scoring it would mean
-        // guessing whether they told a different story or the matching simply failed.
-        guard !source.covered.isEmpty else {
+        // Nothing recognisable at all — not an event, not a character. Scoring it would
+        // mean guessing whether they told a different story or the matching simply failed.
+        // Recognising the cast but none of the events is a finding, not an unknown.
+        guard source.recognisedSomething else {
             phase = .unmatched
             return
         }

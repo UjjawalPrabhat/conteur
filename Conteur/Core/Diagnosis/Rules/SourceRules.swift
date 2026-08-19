@@ -194,8 +194,11 @@ struct StakesRule: DiagnosticRule {
 struct InventionRule: DiagnosticRule {
     let dimension = Dimension.fidelity
 
+    /// Finding no invented name is only reassuring if the retelling was recognisably about
+    /// this story. Without that, fidelity would be reported as strong on the strength of
+    /// having recognised nothing at all.
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.timeline.delivery.wordCount >= 30
+        input.timeline.delivery.wordCount >= 30 && input.comparison.recognisedSomething
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
@@ -224,27 +227,32 @@ struct CoverageRule: DiagnosticRule {
 
     let dimension = Dimension.fidelity
 
-    /// Needs at least one recognised event. With none, "they told none of it" cannot be
-    /// told apart from "none of it was recognised", and reporting a share would claim
-    /// knowledge the comparison does not have.
+    /// Needs something recognisable. With no event *and* no character matched, "they told
+    /// none of it" cannot be told apart from "none of it was recognised", and a share would
+    /// claim knowledge the comparison does not have. A recognised cast settles that.
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.timeline.delivery.wordCount >= 30 && !input.comparison.covered.isEmpty
+        input.timeline.delivery.wordCount >= 30 && input.comparison.recognisedSomething
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
-        let share = input.comparison.coverageShare
+        let comparison = input.comparison
+        let share = comparison.coverageShare
         guard share < Self.tolerated else { return [] }
 
-        let total = input.comparison.story.loadBearingBeats.count
+        let total = comparison.story.loadBearingBeats.count
         let told = Int(share * Double(total))
+        let named = comparison.mentionedEntities.map(\.name).first
+
         return [
             Finding(
                 dimension: dimension,
                 subject: "coverage",
-                observation: "\(told) of the story's \(total) events came through",
+                observation: comparison.talkedAroundIt
+                    ? "you talked about the story rather than telling it — \(named.map { "\($0) came up, but " } ?? "")none of its \(total) events came through"
+                    : "\(told) of the story's \(total) events came through",
                 magnitude: 1 - share,
-                weight: 0.3,
-                evidence: input.comparison.omittedLoadBearing.prefix(2).map {
+                weight: comparison.talkedAroundIt ? 0.5 : 0.3,
+                evidence: comparison.omittedLoadBearing.prefix(2).map {
                     .missing($0.summary)
                 }
             )

@@ -152,6 +152,36 @@ struct RuleBasedDiagnosisTests {
         )
     }
 
+    /// Talking about a story is not telling it. Recognising the cast but none of the events
+    /// used to dead-end with no feedback at all, which threw away a real finding.
+    @Test func talkingAboutTheStoryWithoutTellingItIsAFinding() {
+        let input = Fixture.input(
+            Fixture.comparison(told: [], mentioning: ["Aren", "Mira"]),
+            transcript: Fixture.transcript(words: 60)
+        )
+
+        let result = diagnosis.diagnose(input, against: .none)
+        let coverage = result.assessment(for: .fidelity)?.findings.first { $0.subject == "coverage" }
+
+        #expect(result.isJudgeable)
+        #expect(coverage != nil)
+        #expect(coverage?.observation.contains("rather than telling it") == true)
+        #expect(coverage?.observation.contains("Aren") == true)
+    }
+
+    /// With neither an event nor a character recognised, nothing can be claimed — a wrong
+    /// story and a failed match look identical.
+    @Test func recognisingNothingAtAllStaysUnjudged() {
+        let input = Fixture.input(
+            Fixture.comparison(told: [], mentioning: []),
+            transcript: Fixture.transcript(words: 60)
+        )
+
+        let fidelity = diagnosis.diagnose(input, against: .none).assessment(for: .fidelity)
+
+        #expect(fidelity?.band == .insufficient)
+    }
+
     // MARK: - Length
 
     @Test func aRetellingReducedToASummaryIsFlagged() {
