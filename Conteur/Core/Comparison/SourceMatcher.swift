@@ -5,6 +5,13 @@ import Foundation
 ///
 /// This is where most of the comparison lives. Only beat coverage needs a model, because
 /// only that requires recognising an event described in different words.
+
+/// A name spoken that belongs to nobody in the story, and when it was spoken.
+struct InventedName: Sendable, Hashable {
+    let name: String
+    let at: TimeInterval
+}
+
 struct SourceMatcher: Sendable {
     func entities(
         in transcript: Transcript,
@@ -23,7 +30,7 @@ struct SourceMatcher: Sendable {
     /// Crude by design — capitalised, not sentence-initial, absent from the story's own
     /// words. It exists because the failure it catches is the worst one available: a
     /// retelling populated with people the story never had.
-    func inventedNames(in transcript: Transcript, from story: GuidedStory) -> [String] {
+    func inventedNames(in transcript: Transcript, from story: GuidedStory) -> [InventedName] {
         let known = Set(
             story.cast
                 .flatMap(\.surfaceForms)
@@ -33,7 +40,7 @@ struct SourceMatcher: Sendable {
             story.prose.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
         )
 
-        var invented: [String] = []
+        var invented: [InventedName] = []
         for (index, word) in transcript.words.enumerated() {
             let bare = word.text.trimmingCharacters(in: .punctuationCharacters)
             guard
@@ -45,7 +52,8 @@ struct SourceMatcher: Sendable {
 
             let lowered = bare.lowercased()
             guard !known.contains(lowered), !storyWords.contains(lowered) else { continue }
-            if !invented.contains(bare) { invented.append(bare) }
+            guard !invented.contains(where: { $0.name == bare }) else { continue }
+            invented.append(InventedName(name: bare, at: word.start))
         }
         return invented
     }

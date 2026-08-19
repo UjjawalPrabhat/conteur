@@ -12,6 +12,7 @@ final class SessionViewModel {
         case reading
         case responding
         case tooShort
+        case unmatched
         case failed(String)
     }
 
@@ -250,6 +251,12 @@ final class SessionViewModel {
         // existed only because structure had to be inferred with nothing to compare to.
         let source = (try? await comparer.compare(transcript, with: story))
             ?? .nothing(for: story)
+        // Nothing in the retelling could be matched to the story. Scoring it would mean
+        // guessing whether they told a different story or the matching simply failed.
+        guard !source.covered.isEmpty else {
+            phase = .unmatched
+            return
+        }
         let diagnosis = diagnosing.diagnose(
             DiagnosticInput(timeline: timeline, comparison: source),
             against: baseline

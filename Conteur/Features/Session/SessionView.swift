@@ -112,7 +112,7 @@ struct SessionView: View {
     @ViewBuilder
     private var action: some View {
         switch model.phase {
-        case .failed, .tooShort:
+        case .failed, .tooShort, .unmatched:
             Button("Start again") { model.begin() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -137,6 +137,8 @@ struct SessionView: View {
         case .responding: ""
         case .tooShort:
             "That was too short for me to say anything useful. Tell me a bit more of it."
+        case .unmatched:
+            "I couldn't match any of that to \"\(story.title)\". Try telling me what happened in it."
         case .failed(let message): message
         }
     }

@@ -57,7 +57,7 @@ struct OnDeviceComposer: FeedbackComposing {
             lines.append(contentsOf: progress.introduced.map { "- new this time: \($0.observation)" })
         }
 
-        lines.append("What they did: \(focus.dimension.rawValue)")
+        lines.append("What went wrong with \(focus.dimension.rawValue):")
         lines.append(contentsOf: focus.findings.map { "- \($0.observation)" })
         if let history, progress == nil {
             lines.append("Last time this was \(history.rawValue).")
@@ -70,6 +70,13 @@ struct OnDeviceComposer: FeedbackComposing {
         was observed about how they told it. Say it back to them.
 
         Use only what you are given. Never invent a detail, a quote or a number.
+
+        Everything you are given is a fault in how they told it. The thing to do
+        differently must be to fix or stop what is listed — never to add more of it. If
+        they brought in somebody the story did not have, the fix is to leave that person
+        out, not to include them.
+
+        The story itself is fixed and cannot change. Only their telling of it can.
 
         Speak to them directly, as one person to another. Name the moment, say what it
         cost the story, and stop. Three or four sentences.

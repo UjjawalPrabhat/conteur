@@ -15,6 +15,17 @@ final class FeedbackViewModel {
 
     var feedback: Feedback? { assessment.feedback }
 
+    /// Moments in the retelling the feedback is about — these can be pointed at.
+    var located: [Evidence] {
+        (feedback?.evidence ?? []).filter(\.isLocated)
+    }
+
+    /// Things the story had that the retelling did not. There is no moment to point at,
+    /// so these are shown as absences rather than as places.
+    var absences: [Evidence] {
+        (feedback?.evidence ?? []).filter { !$0.isLocated }
+    }
+
     var bands: [DimensionAssessment] {
         assessment.diagnosis.assessments.sorted { $0.dimension.rawValue < $1.dimension.rawValue }
     }
@@ -49,7 +60,8 @@ final class FeedbackViewModel {
         passages.first { time >= $0.start && time < $0.end } ?? passages.first
     }
 
-    func reveal(_ time: TimeInterval) {
+    func reveal(_ time: TimeInterval?) {
+        guard let time else { return }
         highlighted = passage(covering: time)?.start
     }
 

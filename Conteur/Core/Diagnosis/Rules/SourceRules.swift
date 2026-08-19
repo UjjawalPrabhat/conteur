@@ -24,7 +24,7 @@ struct OmittedEventRule: DiagnosticRule {
                 observation: "the retelling left out \(beat.summary.firstClause)",
                 magnitude: 1,
                 weight: beat.isClimax ? 0.4 : 0.2,
-                evidence: [Evidence(at: 0, quote: beat.summary, measure: nil)]
+                evidence: [.missing(beat.summary)]
             )
         }
     }
@@ -48,7 +48,7 @@ struct OmittedCharacterRule: DiagnosticRule {
                 observation: "\(entity.name) never came up, and the story does not work without them",
                 magnitude: 1,
                 weight: 0.3,
-                evidence: [Evidence(at: 0, quote: entity.name, measure: nil)]
+                evidence: [.missing(entity.name)]
             )
         }
     }
@@ -101,7 +101,7 @@ struct UncausedEventRule: DiagnosticRule {
                 observation: "\(told.summary.firstClause) arrived without \(cause.summary.firstClause), which is what caused it",
                 magnitude: 1,
                 weight: 0.25,
-                evidence: [Evidence(at: 0, quote: cause.summary, measure: nil)]
+                evidence: [.missing(cause.summary)]
             )
         }
     }
@@ -133,7 +133,7 @@ struct CompressionRule: DiagnosticRule {
                     observation: "\(spoken) words for a story that usually takes \(expected.lowerBound) to \(expected.upperBound) to retell — it came out as a summary rather than a story",
                     magnitude: 1 - comparison.compression,
                     weight: 0.3,
-                    evidence: [Evidence(at: 0, quote: nil, measure: "\(spoken) words")]
+                    evidence: [.missing("\(spoken) words against \(expected.lowerBound)–\(expected.upperBound)")]
                 )
             ]
         }
@@ -145,7 +145,7 @@ struct CompressionRule: DiagnosticRule {
                     observation: "\(spoken) words for a story that usually takes \(expected.lowerBound) to \(expected.upperBound) to retell",
                     magnitude: comparison.compression,
                     weight: 0.25,
-                    evidence: [Evidence(at: 0, quote: nil, measure: "\(spoken) words")]
+                    evidence: [.missing("\(spoken) words against \(expected.lowerBound)–\(expected.upperBound)")]
                 )
             ]
         }
@@ -176,7 +176,7 @@ struct StakesRule: DiagnosticRule {
                 magnitude: 1,
                 weight: 0.4,
                 evidence: [
-                    Evidence(at: 0, quote: input.comparison.story.stakes, measure: nil)
+                    .missing(input.comparison.story.stakes)
                 ]
             )
         ]
@@ -200,14 +200,15 @@ struct InventionRule: DiagnosticRule {
         let invented = input.comparison.inventedNames
         guard !invented.isEmpty else { return [] }
 
+        let names = invented.map(\.name)
         return [
             Finding(
                 dimension: dimension,
                 subject: "invented-names",
-                observation: "\(invented.joined(separator: ", ")) appeared in your retelling but not in the story",
+                observation: "you brought in \(names.formattedList), who \(names.count == 1 ? "is" : "are") not in the story",
                 magnitude: Double(invented.count),
                 weight: 0.35,
-                evidence: [Evidence(at: 0, quote: invented.joined(separator: ", "), measure: nil)]
+                evidence: invented.map { .at($0.at, quote: $0.name) }
             )
         ]
     }
@@ -221,8 +222,11 @@ struct CoverageRule: DiagnosticRule {
 
     let dimension = Dimension.fidelity
 
+    /// Needs at least one recognised event. With none, "they told none of it" cannot be
+    /// told apart from "none of it was recognised", and reporting a share would claim
+    /// knowledge the comparison does not have.
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.timeline.delivery.wordCount >= 30
+        input.timeline.delivery.wordCount >= 30 && !input.comparison.covered.isEmpty
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
@@ -239,10 +243,17 @@ struct CoverageRule: DiagnosticRule {
                 magnitude: 1 - share,
                 weight: 0.3,
                 evidence: input.comparison.omittedLoadBearing.prefix(2).map {
-                    Evidence(at: 0, quote: $0.summary, measure: nil)
+                    .missing($0.summary)
                 }
             )
         ]
+    }
+}
+
+private extension [String] {
+    var formattedList: String {
+        guard count > 1, let last = self.last else { return first ?? "" }
+        return dropLast().joined(separator: ", ") + " and " + last
     }
 }
 

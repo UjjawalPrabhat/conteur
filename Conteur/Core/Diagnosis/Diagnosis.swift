@@ -50,9 +50,22 @@ enum Band: String, Sendable, Hashable, CaseIterable, Comparable {
 /// A claim's receipt. Every finding must carry at least one, so no feedback can be
 /// given that the speaker cannot go back and hear for themselves.
 struct Evidence: Sendable, Hashable {
-    let at: TimeInterval
+    /// When it happened, or nil when the finding is about something absent. You cannot
+    /// point at the moment somebody failed to say something.
+    let at: TimeInterval?
     let quote: String?
     let measure: String?
+
+    static func at(_ time: TimeInterval, quote: String? = nil, measure: String? = nil) -> Evidence {
+        Evidence(at: time, quote: quote, measure: measure)
+    }
+
+    /// Something the story had that the retelling did not.
+    static func missing(_ quote: String, measure: String? = nil) -> Evidence {
+        Evidence(at: nil, quote: quote, measure: measure)
+    }
+
+    var isLocated: Bool { at != nil }
 }
 
 struct Finding: Sendable, Hashable {

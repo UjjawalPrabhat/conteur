@@ -20,7 +20,7 @@ struct SourceComparison: Sendable {
     let omittedEntities: [StoryEntity]
     /// Names spoken that appear nowhere in the story's cast. The clearest fidelity signal
     /// there is: a reteller who introduces a character the story never had.
-    let inventedNames: [String]
+    let inventedNames: [InventedName]
     /// Fraction of covered beat pairs told in the story's own order, 0...1.
     let orderAccuracy: Double
     /// Retelling length as a fraction of the story's.

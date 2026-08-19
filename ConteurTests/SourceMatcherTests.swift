@@ -49,8 +49,9 @@ struct SourceMatcherTests {
             from: story
         )
 
-        #expect(invented.contains("Alex"))
-        #expect(invented.contains("Jordan"))
+        #expect(invented.map(\.name) == ["Alex", "Jordan"])
+        // Located, so the feedback can point at the moment rather than at 0:00.
+        #expect(invented.allSatisfy { $0.at > 0 })
     }
 
     @Test func theStoryOwnCharactersAreNeverFlagged() {

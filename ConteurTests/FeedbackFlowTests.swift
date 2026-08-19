@@ -69,6 +69,16 @@ struct FeedbackFlowTests {
     }
 
     /// Feedback must never point at a moment that is not in the recording.
+    /// An absence cannot be pointed at, so it must not carry a timestamp — a 0:00 beside
+    /// "you left this out" reads as a claim that it happened at the start.
+    @Test func anAbsenceCarriesNoTimestamp() async {
+        let result = await run(Fixture.comparison(told: [1, 2, 3]))
+        let absences = (result.feedback?.evidence ?? []).filter { !$0.isLocated }
+
+        #expect(absences.isEmpty == false)
+        #expect(absences.allSatisfy { $0.at == nil })
+    }
+
     @Test func everyPieceOfEvidenceLandsInsideTheRetelling() async {
         let transcript = Fixture.transcript(words: 150)
         let result = await run(
@@ -77,8 +87,11 @@ struct FeedbackFlowTests {
         )
 
         for evidence in result.feedback?.evidence ?? [] {
-            #expect(evidence.at >= 0)
-            #expect(evidence.at <= transcript.duration)
+            // An absence has no location, and asserting one used to be satisfied by a
+            // fabricated 0:00 that the feedback screen then displayed as a real moment.
+            guard let at = evidence.at else { continue }
+            #expect(at >= 0)
+            #expect(at <= transcript.duration)
         }
     }
 

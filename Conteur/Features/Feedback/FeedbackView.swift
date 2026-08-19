@@ -96,42 +96,71 @@ struct FeedbackView: View {
     /// opinion; with it, the reader can go and check.
     @ViewBuilder
     private func evidence(scrollingWith scroll: ScrollViewProxy) -> some View {
-        if let feedback = model.feedback, !feedback.evidence.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Where")
-                    .font(.headline)
-                    .padding(.bottom, 8)
+        VStack(alignment: .leading, spacing: 24) {
+            if !model.located.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Where")
+                        .font(.headline)
+                        .padding(.bottom, 8)
 
-                ForEach(Array(feedback.evidence.enumerated()), id: \.offset) { _, item in
-                    Button {
-                        model.reveal(item.at)
-                        withAnimation {
-                            scroll.scrollTo(model.passage(covering: item.at)?.start, anchor: .center)
-                        }
-                    } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(item.at.timestampLabel)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                if let quote = item.quote {
-                                    Text(quote).multilineTextAlignment(.leading)
-                                }
-                                if let measure = item.measure {
-                                    Text(measure)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                    ForEach(Array(model.located.enumerated()), id: \.offset) { _, item in
+                        Button {
+                            model.reveal(item.at)
+                            withAnimation {
+                                scroll.scrollTo(
+                                    item.at.flatMap { model.passage(covering: $0)?.start },
+                                    anchor: .center
+                                )
                             }
-                            Spacer(minLength: 8)
-                            Image(systemName: "text.quote")
-                                .foregroundStyle(.tint)
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(item.at?.timestampLabel ?? "")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                detail(item)
+                                Spacer(minLength: 8)
+                                Image(systemName: "text.quote")
+                                    .foregroundStyle(.tint)
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
                         }
-                        .padding(.vertical, 8)
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // Absences have no moment to point at, so they are listed rather than located.
+            // Showing them under "Where" with a 0:00 beside them claimed they happened.
+            if !model.absences.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("What didn\'t come through")
+                        .font(.headline)
+                        .padding(.bottom, 4)
+
+                    ForEach(Array(model.absences.enumerated()), id: \.offset) { _, item in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Image(systemName: "minus.circle")
+                                .foregroundStyle(.secondary)
+                            detail(item)
+                            Spacer(minLength: 8)
+                        }
                         .padding(.horizontal, 12)
                     }
-                    .buttonStyle(.plain)
                 }
+            }
+        }
+    }
+
+    private func detail(_ item: Evidence) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let quote = item.quote {
+                Text(quote).multilineTextAlignment(.leading)
+            }
+            if let measure = item.measure {
+                Text(measure)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

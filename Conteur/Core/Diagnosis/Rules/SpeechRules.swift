@@ -24,7 +24,7 @@ struct FilledPauseRule: DiagnosticRule {
                 magnitude: rate,
                 weight: 0.2,
                 evidence: signals.filledPauses.prefix(3).map {
-                    Evidence(at: $0.at, quote: $0.token, measure: rate.percentLabel)
+                    .at($0.at, quote: $0.token, measure: rate.percentLabel)
                 }
             )
         ]
@@ -50,7 +50,7 @@ struct StallRule: DiagnosticRule {
                 magnitude: Double(stalls.count),
                 weight: 0.25,
                 evidence: stalls.prefix(3).map {
-                    Evidence(at: $0.start, quote: nil, measure: $0.duration.secondsLabel)
+                    .at($0.start, measure: $0.duration.secondsLabel)
                 }
             )
         ]
@@ -77,7 +77,7 @@ struct RestartRule: DiagnosticRule {
                 magnitude: Double(restarts.count),
                 weight: 0.2,
                 evidence: restarts.prefix(3).map {
-                    Evidence(at: $0.at, quote: $0.phrase, measure: nil)
+                    .at($0.at, quote: $0.phrase)
                 }
             )
         ]
@@ -109,7 +109,7 @@ struct MonotoneRule: DiagnosticRule {
                 magnitude: Double(Self.minimumVariation - variation),
                 weight: 0.3,
                 evidence: [
-                    Evidence(at: 0, quote: nil, measure: Double(variation).percentLabel)
+                    Evidence(at: nil, quote: nil, measure: Double(variation).percentLabel)
                 ]
             )
         ]
@@ -143,7 +143,7 @@ struct FlatClimaxRule: DiagnosticRule {
                 observation: "your face stayed still through the turning point at \(climax.at.timestampLabel)",
                 magnitude: Double(Self.stillness - variation),
                 weight: 0.25,
-                evidence: [Evidence(at: climax.at, quote: climax.quote, measure: nil)]
+                evidence: [.at(climax.at, quote: climax.quote)]
             )
         ]
     }
@@ -175,7 +175,7 @@ struct RushedClimaxRule: DiagnosticRule {
                 observation: "you sped up to \(Int(local)) words a minute through the turning point, against \(Int(average)) across the rest",
                 magnitude: local / average,
                 weight: 0.25,
-                evidence: [Evidence(at: climax.at, quote: climax.quote, measure: "\(Int(local)) wpm")]
+                evidence: [.at(climax.at, quote: climax.quote, measure: "\(Int(local)) wpm")]
             )
         ]
     }
