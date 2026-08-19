@@ -7,6 +7,7 @@ import SwiftUI
 /// resembles talking about something you actually read.
 struct ReadingView: View {
     let story: GuidedStory
+    let onBack: () -> Void
     let onFinished: () -> Void
 
     @State private var hasReachedEnd = false
@@ -29,9 +30,17 @@ struct ReadingView: View {
                 closing
             }
             .padding(24)
+            // Clears the floating tab bar, which otherwise sits over the last lines.
+            .safeAreaPadding(.bottom, 60)
         }
-        .navigationTitle(story.title)
+        // No navigation title: the story's own heading is directly below it, and two
+        // copies of the same words read as a mistake.
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Stories", systemImage: "chevron.left", action: onBack)
+            }
+        }
     }
 
     private var header: some View {

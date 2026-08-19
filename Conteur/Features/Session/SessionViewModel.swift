@@ -72,6 +72,9 @@ final class SessionViewModel {
     private var expressions: [ExpressionSample] = []
     private var session: Task<Void, Never>?
     private var quietSince: TimeInterval?
+    /// Set when the telling is walked away from, so the analysis is skipped rather than
+    /// producing feedback nobody asked for.
+    private var isAbandoned = false
 
     init(
         story: GuidedStory,
@@ -144,6 +147,16 @@ final class SessionViewModel {
         Task { await audio.stop() }
     }
 
+    /// Walks away from the telling: closes the microphone and produces no feedback.
+    /// Without this the view could be dismissed while capture was still running.
+    func cancel() async {
+        isAbandoned = true
+        endCapture()
+        await session?.value
+        isAbandoned = false
+        phase = .ready
+    }
+
     func silence() async {
         await speech.stop()
     }
@@ -210,6 +223,11 @@ final class SessionViewModel {
     // MARK: - Analysis
 
     private func respond() async throws {
+        guard !isAbandoned else {
+            phase = .ready
+            return
+        }
+
         // Analysing a handful of words does not produce weak feedback, it produces
         // invented feedback: the model fills the summary it is asked for, and every
         // dimension reports strong because no rule had anything to fire on.
@@ -268,6 +286,7 @@ final class SessionViewModel {
         expressions = []
         neutral = ExpressionBaseline()
         elapsed = 0
+        isAbandoned = false
         assessment = nil
         level = 0
         isAttending = false
