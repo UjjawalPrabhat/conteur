@@ -10,6 +10,10 @@ struct CampfireScene: View {
     /// is gone, so the screen feels like a later hour of the same night.
     var isClose = false
 
+    /// A fire that never stops moving is exactly what somebody who turns this on asked not to
+    /// see. It still burns — the scene is the screen — but it holds still.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var layout: Layout { isClose ? .close : .wide }
 
     var body: some View {
@@ -19,22 +23,31 @@ struct CampfireScene: View {
 
             ZStack {
                 layout.sky.ignoresSafeArea()
-                StarField(ceiling: layout.starCeiling)
+                StarField(ceiling: layout.starCeiling, isStill: reduceMotion)
                 if layout.showsTreeline {
                     Treeline(top: size.height * 0.44, height: 130)
                 }
                 ground(in: size)
                 lightPool(at: fire)
-                FireGlow(diameter: layout.glowDiameter, strength: layout.glowStrength)
+                FireGlow(
+                    diameter: layout.glowDiameter,
+                    strength: layout.glowStrength,
+                    isStill: reduceMotion
+                )
                     .position(fire)
                 Logs(scale: layout.logScale).position(fire)
-                Flames(scale: layout.flameScale)
+                Flames(scale: layout.flameScale, isStill: reduceMotion)
                     .position(x: fire.x, y: fire.y - layout.flameScale * 46)
-                EmberDrift(rise: layout.emberRise)
-                    .position(x: fire.x, y: fire.y - layout.flameScale * 60)
+                if !reduceMotion {
+                    EmberDrift(rise: layout.emberRise)
+                        .position(x: fire.x, y: fire.y - layout.flameScale * 60)
+                }
                 foregroundRim(in: size)
             }
             .ignoresSafeArea()
+            // The whole scene is decoration. Announcing a treeline and five embers to
+            // somebody using VoiceOver buries the one thing on this screen that matters.
+            .accessibilityHidden(true)
         }
     }
 
@@ -154,6 +167,7 @@ private extension CampfireScene {
 
 private struct StarField: View {
     let ceiling: CGFloat
+    let isStill: Bool
 
     /// Fixed positions. Generated once from a constant seed, because a star field that
     /// reshuffles on every layout pass reads as noise rather than a sky.
@@ -189,9 +203,9 @@ private struct StarField: View {
                         y: star.y * proxy.size.height * ceiling
                     )
                     .animation(
-                        .easeInOut(duration: 6 + Double(index % 4) * 0.5)
-                        .repeatForever()
-                        .delay(Double(index % 7) * 0.4),
+                        isStill ? nil : .easeInOut(duration: 6 + Double(index % 4) * 0.5)
+                            .repeatForever()
+                            .delay(Double(index % 7) * 0.4),
                         value: bright
                     )
             }
@@ -236,6 +250,7 @@ private struct Treeline: View {
 private struct FireGlow: View {
     let diameter: CGFloat
     let strength: Double
+    let isStill: Bool
 
     @State private var lit = false
 
@@ -257,7 +272,7 @@ private struct FireGlow: View {
             .blur(radius: 10)
             .opacity(lit ? 0.92 : 0.66)
             .scaleEffect(lit ? 1.05 : 0.97)
-            .animation(.easeInOut(duration: 2.7).repeatForever(), value: lit)
+            .animation(isStill ? nil : .easeInOut(duration: 2.7).repeatForever(), value: lit)
             .onAppear { lit = true }
     }
 }
@@ -295,6 +310,7 @@ private struct Logs: View {
 /// read as one animated object; desynchronised ones read as fire.
 private struct Flames: View {
     let scale: CGFloat
+    let isStill: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -302,20 +318,23 @@ private struct Flames: View {
                 size: CGSize(width: 86 * scale, height: 126 * scale),
                 core: Color.flameCore,
                 blur: 5 * scale,
-                period: 1.7
+                period: 1.7,
+                isStill: isStill
             )
             Flame(
                 size: CGSize(width: 44 * scale, height: 80 * scale),
                 core: Color.flameHeart,
                 blur: 2.5 * scale,
                 period: 1.15,
+                isStill: isStill,
                 offBeat: true
             )
             Flame(
                 size: CGSize(width: 18 * scale, height: 34 * scale),
                 core: Color(hex: 0xFFFBF0),
                 blur: 2 * scale,
-                period: 0.9
+                period: 0.9,
+                isStill: isStill
             )
         }
         .frame(height: 126 * scale, alignment: .bottom)
@@ -327,6 +346,7 @@ private struct Flame: View {
     let core: Color
     let blur: CGFloat
     let period: Double
+    let isStill: Bool
     /// Started half a period late, so this flame is falling while the one behind it rises.
     var offBeat = false
 
@@ -356,7 +376,7 @@ private struct Flame: View {
             .rotationEffect(.degrees(high ? 2.5 : -2.5), anchor: .bottom)
             .opacity(high ? 1 : 0.9)
             .animation(
-                .easeInOut(duration: period)
+                isStill ? nil : .easeInOut(duration: period)
                     .delay(offBeat ? period / 2 : 0)
                     .repeatForever(),
                 value: high

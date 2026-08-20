@@ -68,12 +68,6 @@ extension SourceComparison {
         omittedEntities.filter { $0.importance == .central }
     }
 
-    /// Components of the story that never came through, limited to those the story
-    /// actually contained.
-    var omittedComponents: Set<StoryComponent> {
-        Set(omittedLoadBearing.map(\.component)).subtracting(covered.map(\.beat.component))
-    }
-
     /// Whether anything in the retelling was recognisably about this story. Entities match
     /// on plain text, so this holds even when no event was recognised.
     var recognisedSomething: Bool {
@@ -119,10 +113,6 @@ extension SourceComparison {
         covered.filter(\.isLocated).sorted { ($0.at ?? 0) < ($1.at ?? 0) }
     }
 
-    var climaxCoverage: BeatCoverage? {
-        covered.first { $0.beat.isClimax }
-    }
-
     /// The turning point, only when the moment it was told is known — the pace and
     /// expression rules need a time, not just the knowledge that it was covered.
     var locatedClimax: BeatCoverage? {
@@ -148,20 +138,6 @@ extension SourceComparison {
                 let cause = story.beat(causeID)
             else { return nil }
             return (coverage.beat, cause)
-        }
-    }
-
-    /// Causal links the story had between two beats the reteller covered — if both ends
-    /// were told, the link between them was tellable.
-    var tellableCausalLinks: [(cause: CanonicalBeat, effect: CanonicalBeat)] {
-        let told = Set(covered.map(\.beat.id))
-        return story.beats.compactMap { beat in
-            guard
-                let causeID = beat.causedBy,
-                told.contains(beat.id), told.contains(causeID),
-                let cause = story.beat(causeID)
-            else { return nil }
-            return (cause, beat)
         }
     }
 }

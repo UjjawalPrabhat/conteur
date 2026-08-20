@@ -12,14 +12,6 @@ enum ChallengeVerdict: String, Sendable, Hashable {
         case .notYet: "Not this time"
         }
     }
-
-    var symbol: String {
-        switch self {
-        case .met: "checkmark.circle.fill"
-        case .closer: "arrow.up.right.circle.fill"
-        case .notYet: "circle.dashed"
-        }
-    }
 }
 
 /// What the second telling changed.

@@ -166,10 +166,6 @@ struct SourceMatcher: Sendable {
 }
 
 extension Transcript {
-    var normalizedText: String {
-        words.map(\.normalized).joined(separator: " ")
-    }
-
     /// Whether a name from the story was said, allowing for the ways speech differs from an
     /// authored surface form.
     ///

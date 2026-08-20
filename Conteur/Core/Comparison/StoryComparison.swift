@@ -41,15 +41,6 @@ struct StoryComparison: SourceComparing {
     /// trustworthy number here.
     private static let strongOverlap = 3
 
-    /// One event per request.
-    ///
-    /// Asked about several at once the model answers per batch rather than per event: on every
-    /// commentary sample it credited exactly the first batch of three and nothing after it,
-    /// which is position rather than judgement. Batching three at a time had already cut
-    /// refusals from nine samples to one; going to one removes the anchoring as well, at the
-    /// cost of one small call per event.
-    private static let eventsPerRequest = 1
-
     /// Refusals are not reproducible: the same sample was answered on one run and refused on
     /// the next. One retry is worth more than it costs.
     private static let attempts = 2

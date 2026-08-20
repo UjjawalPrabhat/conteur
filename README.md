@@ -86,6 +86,3 @@ observed yet:
   `FilledPauseRule` has no input and filler detection has to move to acoustic analysis.
 - How long Pass B plus composition take after the speaker stops.
 
-`SignalProbeView` in `Conteur/Features/Diagnostics/` exists for exactly this — it dumps
-raw measurements from a short recording. Point `ConteurApp` at it instead of `RootView`
-when you want the numbers rather than the finished flow.

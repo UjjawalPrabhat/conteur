@@ -3,6 +3,9 @@ import SwiftUI
 
 /// Owns the loop: pick a story, read it, tell it back, hear how you told it, tell it again.
 ///
+/// Sits above the features rather than inside one. It drives Reading, Session and Feedback in
+/// turn, and living in any of them would have made that feature the owner of its two siblings.
+///
 /// Every telling ends on the feedback screen — a second one simply shows what changed at
 /// the top of it. That keeps the loop open past two attempts, and means no telling can ever
 /// end without feedback.

@@ -22,7 +22,7 @@ struct FeedbackView: View {
                     header
                     whatChanged
                     note
-                    where_(scrollingWith: scroll)
+                    locatedFindings(scrollingWith: scroll)
                     absences
                     tryAgain
                     everythingElse
@@ -115,7 +115,7 @@ struct FeedbackView: View {
     /// Every claim points at the words it came from. Without that the feedback is an
     /// opinion; with it, the reader can go and check.
     @ViewBuilder
-    private func where_(scrollingWith scroll: ScrollViewProxy) -> some View {
+    private func locatedFindings(scrollingWith scroll: ScrollViewProxy) -> some View {
         if !model.located.isEmpty {
             VStack(alignment: .leading, spacing: Space.md) {
                 SectionHeading(title: "Where")
@@ -132,6 +132,7 @@ struct FeedbackView: View {
                         findingCard(item)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHint("Shows this moment in the transcript below")
                 }
             }
         }

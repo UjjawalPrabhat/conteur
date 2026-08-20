@@ -61,7 +61,7 @@ struct SourceMatcherTests {
         #expect(invented.allSatisfy { $0.at > 0 })
     }
 
-    @Test func theStoryOwnCharactersAreNeverFlagged() {
+    @Test func charactersTheStoryHasAreNeverFlagged() {
         let invented = matcher.inventedNames(
             in: retelling("so Aren asked Mira about Coldhaven"),
             from: story
@@ -234,7 +234,7 @@ struct SourceMatcherTests {
         #expect(accuracy < 1)
     }
 
-    @Test func asingleEventHasNoOrderToGetWrong() {
+    @Test func aSingleEventHasNoOrderToGetWrong() {
         #expect(matcher.orderAccuracy(of: coverage([3])) == 1)
     }
 

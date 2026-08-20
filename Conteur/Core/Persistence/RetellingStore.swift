@@ -2,17 +2,7 @@ import Foundation
 import SwiftData
 
 @MainActor
-protocol RetellingStore {
-    func save(_ assessment: Assessment, attempt: Int, group: UUID, isBenchmark: Bool) throws
-    /// The speaker's own rolling average, which is what the chosen weakness is measured against.
-    func baseline() -> Baseline
-    func lastBand(for dimension: Dimension) -> Band?
-    func recent(limit: Int) -> [StoredRetelling]
-    func attempts(in group: UUID) -> [StoredRetelling]
-}
-
-@MainActor
-struct SwiftDataRetellingStore: RetellingStore {
+struct SwiftDataRetellingStore {
     /// Enough history to smooth out one unusually good or bad day, short enough that
     /// improvement still moves the baseline.
     private static let baselineWindow = 8

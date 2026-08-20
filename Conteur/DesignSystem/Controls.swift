@@ -69,6 +69,10 @@ struct BackButton: View {
                     .textStyle(.actionQuiet)
             }
             .foregroundStyle(tint)
+            // Text alone is a target well under the 44pt minimum, and this is the only way
+            // back on three of the screens.
+            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }

@@ -124,8 +124,7 @@ struct SessionView: View {
     /// Counting up while there is room, and down once there is not. The switch is the
     /// warning — a number falling reads as a limit in a way an elapsed time never does.
     private var clock: String {
-        let seconds = model.isRunningOut ? model.remaining : model.elapsed
-        return "\(Int(seconds) / 60):\(String(format: "%02d", Int(seconds) % 60))"
+        (model.isRunningOut ? model.remaining : model.elapsed).timestampLabel
     }
 
     private func challengeCard(_ text: String) -> some View {
@@ -168,6 +167,10 @@ struct SessionView: View {
             .defaultScrollAnchor(.bottom)
             .shadow(color: .black.opacity(0.85), radius: 8, y: 2)
             .screenPadding()
+            // Read as one running sentence. The caret is a drawn cursor, and spelling it
+            // out mid-sentence is worse than leaving it out.
+            .accessibilityElement()
+            .accessibilityLabel(model.heard)
         }
     }
 
