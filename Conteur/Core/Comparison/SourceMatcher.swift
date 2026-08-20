@@ -76,17 +76,60 @@ struct SourceMatcher: Sendable {
             .compactMap { story.entity(named: $0) }
     }
 
+    /// Words this event's summary uses that no other event's does.
+    ///
+    /// Naming the cast is not telling an event — the model credited events on the strength of
+    /// a character being mentioned, which is why names alone are not enough to corroborate
+    /// one. What an event brings with it beyond its cast is its own vocabulary.
+    func distinctiveWords(of beat: CanonicalBeat, in story: GuidedStory) -> Set<String> {
+        let counts = story.beats.reduce(into: [String: Int]()) { counts, beat in
+            for word in Self.contentWords(of: beat.summary) { counts[word, default: 0] += 1 }
+        }
+        return Self.contentWords(of: beat.summary).filter { counts[$0] == 1 }
+    }
+
     /// Whether the retelling contains anything only this event would have brought up.
     ///
-    /// An event with no distinctive name is left alone: there is nothing to check it against,
-    /// and rejecting it for that would be worse than accepting it.
+    /// Both halves have to hold. Measured against the corpus this rejects seven of eleven
+    /// wrongly credited events and costs one real coverage — and the failure it removes is the
+    /// one worth paying for, since crediting an event that was never told sends the feedback
+    /// somewhere the speaker never went.
     func corroborates(_ transcript: Transcript, _ beat: CanonicalBeat, in story: GuidedStory) -> Bool {
-        let distinctive = distinctiveEntities(of: beat, in: story)
-        guard !distinctive.isEmpty else { return true }
-        return distinctive.contains { entity in
+        let entities = distinctiveEntities(of: beat, in: story)
+        let named = entities.isEmpty || entities.contains { entity in
             entity.surfaceForms.contains { transcript.contains(phrase: $0) }
         }
+        guard named else { return false }
+
+        let words = distinctiveWords(of: beat, in: story)
+        return words.isEmpty || words.contains { transcript.contains(phrase: $0) }
     }
+
+    private static func contentWords(of summary: String) -> Set<String> {
+        Set(
+            summary
+                .lowercased()
+                .split(whereSeparator: { !$0.isLetter })
+                .map(String.init)
+                .filter { $0.count > 2 && !functionWords.contains($0) }
+        )
+    }
+
+    /// Counting how many summaries use a word removes anything common, but not a function word
+    /// that happens to appear in only one of them: where a single summary says "into", "into"
+    /// becomes that event's distinctive word and matches any retelling at all. Deriving the
+    /// list from the library's own summaries instead was tried, scored worse, and would have
+    /// made the check drift as stories were added.
+    private static let functionWords: Set<String> = [
+        "the", "and", "but", "then", "when", "while", "from", "into", "over", "under",
+        "after", "before", "for", "with", "she", "her", "hers", "his", "him", "they",
+        "them", "their", "its", "this", "that", "these", "those", "there", "here",
+        "who", "whom", "whose", "which", "what", "are", "was", "were", "been", "being",
+        "has", "have", "had", "does", "did", "will", "would", "can", "could", "should",
+        "may", "might", "must", "not", "nor", "than", "too", "very", "just", "only",
+        "own", "same", "now", "out", "off", "again", "further", "once", "one", "two",
+        "three", "down",
+    ]
 
     /// Fraction of covered beat pairs told in the story's own order. A concordant-pair
     /// measure, so six beats with one displaced scores far better than six told backwards.

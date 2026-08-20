@@ -99,12 +99,15 @@ struct SourceMatcherTests {
         #expect(distinctive.contains("Aren") == false)
     }
 
+    /// Mira is in three of seven events; Aren is in all of them. The fish is in four, so it
+    /// runs through the story rather than belonging to a part of it, and corroborates little.
     @Test func aNameBelongingToOneStretchIsDistinctive() {
-        let bargain = story.beat(3)!
+        let ending = story.beat(7)!
 
-        let distinctive = matcher.distinctiveEntities(of: bargain, in: story).map(\.name)
+        let distinctive = matcher.distinctiveEntities(of: ending, in: story).map(\.name)
 
-        #expect(distinctive.contains("the silver fish"))
+        #expect(distinctive.contains("Mira"))
+        #expect(distinctive.contains("Aren") == false)
     }
 
     /// Commentary was over-credited in every evaluation run. An event that brings its own name
@@ -123,14 +126,50 @@ struct SourceMatcherTests {
         #expect(matcher.corroborates(told, bargain, in: story))
     }
 
-    /// An event with no distinctive name has nothing to check against, and rejecting it for
-    /// that would be worse than accepting it.
-    @Test func anEventWithNoDistinctiveNameIsLeftAlone() {
+    /// An event carrying no distinctive name used to be waved through, which is how commentary
+    /// kept being credited with the opening. It is checked against its own vocabulary instead.
+    @Test func anEventWithNoDistinctiveNameIsCheckedAgainstItsOwnWords() {
         let story = StoryLibrary.theNineFifteen
         let waiting = story.beat(4)!
 
         #expect(matcher.distinctiveEntities(of: waiting, in: story).isEmpty)
-        #expect(matcher.corroborates(retelling("she waited there"), waiting, in: story))
+        #expect(matcher.corroborates(retelling("she waited there"), waiting, in: story) == false)
+        #expect(
+            matcher.corroborates(
+                retelling("she waited in a service lane with her phone out"),
+                waiting,
+                in: story
+            )
+        )
+    }
+
+    /// The model credited events on the strength of a character being mentioned. Naming the
+    /// cast is not telling an event, so the cast alone cannot corroborate one.
+    @Test func namingTheCastIsNotTellingTheEvent() {
+        let asking = story.beat(5)!
+        let named = retelling("Aren was in it, and Mira, and the silver fish as well")
+
+        #expect(matcher.corroborates(named, asking, in: story) == false)
+        #expect(matcher.corroborates(retelling("he asked for the entire sea"), asking, in: story))
+    }
+
+    @Test func aWordTwoEventsShareIsNotDistinctive() {
+        let asking = story.beat(5)!
+
+        let words = matcher.distinctiveWords(of: asking, in: story)
+
+        #expect(words.contains("sea"))
+        #expect(words.contains("asks") == false)
+    }
+
+    /// Without this, a summary that happens to be the only one saying "into" is corroborated by
+    /// any retelling containing the word.
+    @Test func aFunctionWordIsNeverDistinctive() {
+        for beat in story.beats {
+            let words = matcher.distinctiveWords(of: beat, in: story)
+            #expect(words.contains("their") == false)
+            #expect(words.contains("with") == false)
+        }
     }
 
     // MARK: - Order
