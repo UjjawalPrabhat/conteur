@@ -62,6 +62,32 @@ struct SourceMatcher: Sendable {
         return invented
     }
 
+    /// Names that belong to one part of the story rather than running through it.
+    ///
+    /// The protagonist appears in every event, so their name corroborates nothing. A name that
+    /// turns up in only a couple of events does.
+    func distinctiveEntities(of beat: CanonicalBeat, in story: GuidedStory) -> [StoryEntity] {
+        let appearances = story.beats.reduce(into: [String: Int]()) { counts, beat in
+            for entity in beat.entities { counts[entity, default: 0] += 1 }
+        }
+        let threshold = Double(story.beats.count) / 2
+        return beat.entities
+            .filter { Double(appearances[$0] ?? 0) < threshold }
+            .compactMap { story.entity(named: $0) }
+    }
+
+    /// Whether the retelling contains anything only this event would have brought up.
+    ///
+    /// An event with no distinctive name is left alone: there is nothing to check it against,
+    /// and rejecting it for that would be worse than accepting it.
+    func corroborates(_ transcript: Transcript, _ beat: CanonicalBeat, in story: GuidedStory) -> Bool {
+        let distinctive = distinctiveEntities(of: beat, in: story)
+        guard !distinctive.isEmpty else { return true }
+        return distinctive.contains { entity in
+            entity.surfaceForms.contains { transcript.contains(phrase: $0) }
+        }
+    }
+
     /// Fraction of covered beat pairs told in the story's own order. A concordant-pair
     /// measure, so six beats with one displaced scores far better than six told backwards.
     ///

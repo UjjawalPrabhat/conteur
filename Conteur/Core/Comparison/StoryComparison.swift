@@ -16,11 +16,16 @@ protocol SourceComparing: Sendable {
 /// retelling cover, and quote the words — where "none of them" is a legal answer.
 /// Everything else is computed by `SourceMatcher`.
 struct StoryComparison: SourceComparing {
-    /// Capped output. `quote` is an unbounded string, and asked to quote a retelling that
-    /// contains nothing quotable the model rambles until it fills the 4,096-token window —
-    /// which surfaced as "exceeded model context window size" on three samples, two of them
-    /// commentary. A coverage answer needs a flag and a short quote and nothing else.
-    private static let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: 100)
+    /// Capped output, but not tightly. Unbounded, the model rambles when there is nothing to
+    /// quote and fills the 4,096-token window. Capped at 100 it was cut off mid-structure and
+    /// three samples failed to deserialize instead — retrying cannot help, since greedy
+    /// sampling truncates in exactly the same place. This leaves room for the schema and a
+    /// sentence of quote while still bounding a ramble.
+    private static let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: 300)
+
+    /// Concurrent calls, but not one per event unbounded. Seven at once brought back refusals
+    /// and deserialization failures that were absent in series, which points at contention.
+    private static let concurrentJudgements = 3
 
     /// The default guardrails refused six of fifteen scripted retellings, every faithful one
     /// among them — a story where a mother dies reads as unsafe to a classifier that cannot
@@ -66,7 +71,13 @@ struct StoryComparison: SourceComparing {
             }
             .sorted { ($0.at ?? .greatestFiniteMagnitude) < ($1.at ?? .greatestFiniteMagnitude) }
 
-        let plausible = Self.plausible(claimed, in: transcript)
+        // Commentary was over-credited in every run. The check is on the story's side: an
+        // event that brings its own names with it did not happen in a retelling that never
+        // says any of them.
+        let corroborated = claimed.filter {
+            matcher.corroborates(transcript, $0.beat, in: story)
+        }
+        let plausible = Self.plausible(corroborated, in: transcript)
         let coveredIDs = Set(plausible.map(\.beat.id))
 
         return SourceComparison(
@@ -103,7 +114,10 @@ struct StoryComparison: SourceComparing {
         // series the corpus took nearly seven minutes.
         var judgements: [(id: Int, draft: CoverageDraft)] = []
         try await withThrowingTaskGroup(of: (Int, CoverageDraft).self) { group in
-            for event in story.beats {
+            var pending = story.beats.makeIterator()
+
+            func addNext() {
+                guard let event = pending.next() else { return }
                 group.addTask {
                     // An event that will not answer is thrown rather than treated as
                     // uncovered: an unanswered event reported as an omission would blame the
@@ -122,7 +136,12 @@ struct StoryComparison: SourceComparing {
                     return (event.id, draft)
                 }
             }
-            for try await judgement in group { judgements.append(judgement) }
+
+            for _ in 0..<Self.concurrentJudgements { addNext() }
+            while let judgement = try await group.next() {
+                judgements.append(judgement)
+                addNext()
+            }
         }
 
         let mentions = judgements

@@ -87,6 +87,52 @@ struct SourceMatcherTests {
         #expect(invented.isEmpty)
     }
 
+    // MARK: - Corroboration
+
+    /// The protagonist is in every event, so their name is no evidence that any particular one
+    /// was told.
+    @Test func aNameRunningThroughTheWholeStoryIsNotDistinctive() {
+        let opening = story.beats[0]
+
+        let distinctive = matcher.distinctiveEntities(of: opening, in: story).map(\.name)
+
+        #expect(distinctive.contains("Aren") == false)
+    }
+
+    @Test func aNameBelongingToOneStretchIsDistinctive() {
+        let bargain = story.beat(3)!
+
+        let distinctive = matcher.distinctiveEntities(of: bargain, in: story).map(\.name)
+
+        #expect(distinctive.contains("the silver fish"))
+    }
+
+    /// Commentary was over-credited in every evaluation run. An event that brings its own name
+    /// with it did not happen in a retelling that never says it.
+    @Test func anEventIsNotCorroboratedWhenItsOwnNamesAreAbsent() {
+        let bargain = story.beat(3)!
+        let commentary = retelling("I thought it was quite bleak. Aren deserved better.")
+
+        #expect(matcher.corroborates(commentary, bargain, in: story) == false)
+    }
+
+    @Test func anEventIsCorroboratedWhenItsNameIsThere() {
+        let bargain = story.beat(3)!
+        let told = retelling("he pulled up a silver fish and it spoke to him")
+
+        #expect(matcher.corroborates(told, bargain, in: story))
+    }
+
+    /// An event with no distinctive name has nothing to check against, and rejecting it for
+    /// that would be worse than accepting it.
+    @Test func anEventWithNoDistinctiveNameIsLeftAlone() {
+        let story = StoryLibrary.theNineFifteen
+        let waiting = story.beat(4)!
+
+        #expect(matcher.distinctiveEntities(of: waiting, in: story).isEmpty)
+        #expect(matcher.corroborates(retelling("she waited there"), waiting, in: story))
+    }
+
     // MARK: - Order
 
     @Test func tellingEventsInOrderScoresPerfectly() {
