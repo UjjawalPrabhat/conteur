@@ -35,12 +35,6 @@ extension FeatureTimeline {
         return sqrt(variance) / mean
     }
 
-    var dynamicRange: Float {
-        let levels = prosody.map(\.loudness).filter { $0 > 0 }
-        guard let quietest = levels.min(), let loudest = levels.max(), quietest > 0 else { return 0 }
-        return loudest / quietest
-    }
-
     func wordsPerMinute(in range: Range<TimeInterval>) -> Double {
         let words = transcript.words.filter { range.contains($0.start) }
         let span = range.upperBound - range.lowerBound

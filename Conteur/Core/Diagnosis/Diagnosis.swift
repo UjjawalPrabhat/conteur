@@ -34,8 +34,20 @@ enum Band: String, Sendable, Hashable, CaseIterable, Comparable {
         }
     }
 
+    /// Ordered by how much each claims, so `insufficient` is below `emerging` rather than
+    /// beside it. Declared rather than derived from `allCases`, which needed a force unwrap
+    /// to say something the compiler can check.
+    private var rank: Int {
+        switch self {
+        case .insufficient: 0
+        case .emerging: 1
+        case .developing: 2
+        case .strong: 3
+        }
+    }
+
     static func < (lhs: Band, rhs: Band) -> Bool {
-        allCases.firstIndex(of: lhs)! < allCases.firstIndex(of: rhs)!
+        lhs.rank < rhs.rank
     }
 
     init(score: Double) {
