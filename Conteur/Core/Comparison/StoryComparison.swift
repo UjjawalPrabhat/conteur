@@ -16,7 +16,11 @@ protocol SourceComparing: Sendable {
 /// retelling cover, and quote the words — where "none of them" is a legal answer.
 /// Everything else is computed by `SourceMatcher`.
 struct StoryComparison: SourceComparing {
-    private static let options = GenerationOptions(sampling: .greedy)
+    /// Capped output. `quote` is an unbounded string, and asked to quote a retelling that
+    /// contains nothing quotable the model rambles until it fills the 4,096-token window —
+    /// which surfaced as "exceeded model context window size" on three samples, two of them
+    /// commentary. A coverage answer needs a flag and a short quote and nothing else.
+    private static let options = GenerationOptions(sampling: .greedy, maximumResponseTokens: 100)
 
     /// The default guardrails refused six of fifteen scripted retellings, every faithful one
     /// among them — a story where a mother dies reads as unsafe to a classifier that cannot
@@ -94,24 +98,36 @@ struct StoryComparison: SourceComparing {
         of transcript: Transcript,
         against story: GuidedStory
     ) async throws -> (mentions: [BeatMention], conveyedStakes: Bool) {
-        var mentions: [BeatMention] = []
-
-        for batch in story.beats.chunks(of: Self.eventsPerRequest) {
-            // A batch that will not answer is thrown rather than treated as uncovered: an
-            // unanswered event reported as an omission blames the speaker for a refusal.
-            let draft = try await attempting {
-                let session = LanguageModelSession(
-                    model: Self.model,
-                    instructions: Self.coverageInstructions
-                )
-                return try await session.respond(
-                    to: Self.brief(transcript, batch),
-                    generating: CoverageDraft.self,
-                    options: Self.options
-                ).content
+        // Each event is judged on its own against the same retelling, so they are
+        // independent and there is no reason to wait for one before asking the next. In
+        // series the corpus took nearly seven minutes.
+        var judgements: [(id: Int, draft: CoverageDraft)] = []
+        try await withThrowingTaskGroup(of: (Int, CoverageDraft).self) { group in
+            for event in story.beats {
+                group.addTask {
+                    // An event that will not answer is thrown rather than treated as
+                    // uncovered: an unanswered event reported as an omission would blame the
+                    // speaker for a refusal.
+                    let draft = try await attempting {
+                        let session = LanguageModelSession(
+                            model: Self.model,
+                            instructions: Self.coverageInstructions
+                        )
+                        return try await session.respond(
+                            to: Self.brief(transcript, event),
+                            generating: CoverageDraft.self,
+                            options: Self.options
+                        ).content
+                    }
+                    return (event.id, draft)
+                }
             }
-            mentions.append(contentsOf: draft.mentions)
+            for try await judgement in group { judgements.append(judgement) }
         }
+
+        let mentions = judgements
+            .sorted { $0.id < $1.id }
+            .map { BeatMention(beat: $0.id, covered: $0.draft.covered, quote: $0.draft.quote) }
 
         let stakes = try await attempting {
             let session = LanguageModelSession(
@@ -141,10 +157,10 @@ struct StoryComparison: SourceComparing {
         throw lastError
     }
 
-    private static func brief(_ transcript: Transcript, _ events: [CanonicalBeat]) -> String {
+    private static func brief(_ transcript: Transcript, _ event: CanonicalBeat) -> String {
         """
-        EVENTS FROM THE STORY
-        \(events.map { "\($0.id). \($0.summary)" }.joined(separator: "\n"))
+        AN EVENT FROM THE STORY
+        \(event.summary)
 
         WHAT THEY SAID
         \(transcript.text)
@@ -162,19 +178,18 @@ struct StoryComparison: SourceComparing {
     }
 
     private static let coverageInstructions = """
-        Somebody read a short story and then retold it from memory. You are given some of the
-        story's events, numbered, and what they actually said.
+        Somebody read a short story and then retold it from memory. You are given one event
+        from the story and what they said.
 
-        Answer for every event you are given, including the last one.
+        Say whether their retelling covers that event. It does not have to match the wording.
+        It does have to be there — if they did not tell it, say no.
 
-        Covered means they conveyed that event in their own words. It does not have to match
-        the wording. It does have to be there — if they did not tell it, say so.
+        Naming a character or a place is not telling an event. Talking about the story, or
+        guessing at it, is not telling an event either.
 
-        Do not fill in the story from what you can guess. A retelling that stops early covers
-        only what it reached, and somebody who merely names a character has not told an event.
-
-        When an event is covered, quote the words from their retelling that cover it. Copy the
-        words exactly as they said them. Never write a quote they did not say.
+        If they covered it, quote the words that cover it, exactly as they said them, and keep
+        the quote short. If they did not, answer no and leave the quote empty. Never write a
+        quote they did not say.
         """
 
     private static let stakesInstructions = """
@@ -191,8 +206,11 @@ struct StoryComparison: SourceComparing {
 
 @Generable
 private struct CoverageDraft {
-    @Guide(description: "One entry for every event you were given, in order.")
-    var mentions: [BeatMention]
+    @Guide(description: "True only if the retelling actually covers this event.")
+    var covered: Bool
+
+    @Guide(description: "The words they said that cover it, kept short. Empty if not covered.")
+    var quote: String
 }
 
 @Generable
@@ -201,14 +219,10 @@ private struct StakesDraft {
     var quote: String
 }
 
-@Generable
-fileprivate struct BeatMention {
-    @Guide(description: "The number of the event.")
-    var beat: Int
-
-    @Guide(description: "True only if the retelling actually covers this event.")
-    var covered: Bool
-
-    @Guide(description: "The exact words they said that cover it. Empty if not covered.")
-    var quote: String
+/// Which event, and what the model said about it. The number comes from the request rather
+/// than the answer, so the model cannot misattribute a judgement.
+private struct BeatMention {
+    let beat: Int
+    let covered: Bool
+    let quote: String
 }

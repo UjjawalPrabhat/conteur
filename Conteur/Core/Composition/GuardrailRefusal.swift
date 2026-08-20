@@ -1,20 +1,44 @@
 import Foundation
 import FoundationModels
 
-extension Error {
-    /// Whether the model declined rather than answered.
-    ///
-    /// Worth a named check in one place: pattern-matching the case against the result of
-    /// `as?` silently tests an Optional and never matches, which is how nine refusals in a
-    /// row were counted as zero.
-    var isGuardrailRefusal: Bool {
-        if let generation = self as? LanguageModelSession.GenerationError,
-           case .guardrailViolation = generation {
-            return true
+/// Why a model call produced nothing. Kept apart because they call for different responses:
+/// a refusal is worth retrying, a full context window means the request was too big, and
+/// anything else is a bug until shown otherwise.
+enum ModelFailure: String, Sendable {
+    case refused
+    case contextExceeded
+    case other
+
+    init(_ error: any Error) {
+        if let generation = error as? LanguageModelSession.GenerationError {
+            switch generation {
+            case .guardrailViolation: self = .refused; return
+            case .exceededContextWindowSize: self = .contextExceeded; return
+            default: break
+            }
         }
-        // The typed case did not match a refusal that plainly was one, and being unable to
-        // count refusals made two evaluation runs unreadable. Matching the message is a poor
-        // way to identify an error and the only one that currently works.
-        return localizedDescription.localizedCaseInsensitiveContains("unsafe")
+        // The typed cases did not match failures that plainly were these, and being unable to
+        // count them made two evaluation runs unreadable. Matching the message is a poor way
+        // to identify an error and the only one that has worked.
+        let message = error.localizedDescription.lowercased()
+        if message.contains("unsafe") {
+            self = .refused
+        } else if message.contains("context window") {
+            self = .contextExceeded
+        } else {
+            self = .other
+        }
     }
+
+    var label: String {
+        switch self {
+        case .refused: "refused by the guardrail"
+        case .contextExceeded: "filled the context window"
+        case .other: "failed"
+        }
+    }
+}
+
+extension Error {
+    var isGuardrailRefusal: Bool { ModelFailure(self) == .refused }
 }

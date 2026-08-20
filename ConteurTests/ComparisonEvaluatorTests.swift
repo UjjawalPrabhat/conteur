@@ -74,11 +74,22 @@ struct ComparisonEvaluatorTests {
 
     /// The pattern match this replaced tested an Optional and never fired, which is how nine
     /// consecutive refusals were reported as zero refusals.
-    @Test func aRefusalIsRecognisedAsOne() {
-        struct Other: Error {}
+    /// Three different reasons a call produces nothing, and they call for different
+    /// responses. Being unable to tell them apart made two evaluation runs unreadable.
+    @Test func theReasonsACallProducedNothingAreToldApart() {
+        struct Refused: Error, LocalizedError {
+            var errorDescription: String? { "Detected content likely to be unsafe" }
+        }
+        struct Filled: Error, LocalizedError {
+            var errorDescription: String? { "Exceeded model context window size" }
+        }
+        struct Broken: Error {}
 
-        #expect(Other().isGuardrailRefusal == false)
-        #expect(CancellationError().isGuardrailRefusal == false)
+        #expect(ModelFailure(Refused()) == .refused)
+        #expect(ModelFailure(Filled()) == .contextExceeded)
+        #expect(ModelFailure(Broken()) == .other)
+        #expect(Refused().isGuardrailRefusal)
+        #expect(Broken().isGuardrailRefusal == false)
     }
 
     @Test func everySampleNamesAStoryThatExists() {

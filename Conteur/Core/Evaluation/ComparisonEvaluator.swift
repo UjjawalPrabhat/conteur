@@ -9,10 +9,10 @@ struct SampleScore: Sendable, Identifiable {
     let inventedNames: [String]
     let conveyedStakes: Bool
     let failure: String?
-    /// Refused by the guardrail rather than answered. Kept apart from other failures because
-    /// it says nothing about the model's judgement, and averaging it in as zero hid what the
-    /// model was actually doing on the samples it did answer.
-    let wasRefused: Bool
+    /// Why it produced nothing, when it produced nothing. Kept apart from a wrong answer,
+    /// because averaging a refusal in as zero hid what the model was doing on the samples it
+    /// did answer.
+    let failureKind: ModelFailure?
 
     var id: String { sample.id }
 
@@ -46,7 +46,9 @@ struct EvaluationSummary: Sendable {
 
     /// Only the samples the model actually answered. A refusal is not a wrong answer.
     var answered: [SampleScore] { scores.filter { $0.failure == nil } }
-    var refused: [SampleScore] { scores.filter(\.wasRefused) }
+    func failed(_ kind: ModelFailure) -> [SampleScore] {
+        scores.filter { $0.failureKind == kind }
+    }
 
     var precision: Double { mean(\.precision) }
     var recall: Double { mean(\.recall) }
@@ -107,7 +109,7 @@ struct ComparisonEvaluator: Sendable {
                 inventedNames: [],
                 conveyedStakes: false,
                 failure: "no story with id \(sample.storyID)",
-                wasRefused: false
+                failureKind: .other
             )
         }
 
@@ -120,20 +122,18 @@ struct ComparisonEvaluator: Sendable {
                 inventedNames: comparison.inventedNames.map(\.name),
                 conveyedStakes: comparison.conveyedStakes,
                 failure: nil,
-                wasRefused: false
+                failureKind: nil
             )
         } catch {
-            let refused = error.isGuardrailRefusal
+            let kind = ModelFailure(error)
             return SampleScore(
                 sample: sample,
                 reported: [],
                 located: [],
                 inventedNames: [],
                 conveyedStakes: false,
-                failure: refused
-                    ? "refused by the guardrail"
-                    : error.localizedDescription,
-                wasRefused: refused
+                failure: kind == .other ? error.localizedDescription : kind.label,
+                failureKind: kind
             )
         }
     }
