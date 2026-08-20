@@ -166,6 +166,19 @@ struct SourceMatcherTests {
         #expect(matcher.vocabularyOverlap(retelling("it was quite sad"), letters, in: story) == 0)
     }
 
+    /// The exact case from the evaluation runs: the model denied this event in three
+    /// consecutive runs on a retelling that carries its vocabulary. Asserted against the corpus
+    /// text rather than a hand-written line, so it pins what the device actually sees.
+    @Test func theCorpusRetellingTheModelDeniedCarriesTheEventsVocabulary() throws {
+        let story = StoryLibrary.whatTheHouseKept
+        let letters = try #require(story.beat(2))
+        let sample = try #require(
+            RetellingCorpus.all.first { $0.storyID == story.id && $0.shape == .faithful }
+        )
+
+        #expect(matcher.vocabularyOverlap(sample.transcript, letters, in: story) >= 3)
+    }
+
     @Test func aWordTwoEventsShareIsNotDistinctive() {
         let asking = story.beat(5)!
 
