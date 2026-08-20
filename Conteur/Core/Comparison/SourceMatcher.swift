@@ -88,6 +88,18 @@ struct SourceMatcher: Sendable {
         return Self.contentWords(of: beat.summary).filter { counts[$0] == 1 }
     }
 
+    /// How much of an event's own vocabulary the retelling contains.
+    ///
+    /// One word is weak evidence and enough words are strong enough to outweigh a judgement,
+    /// so the count is reported rather than a verdict.
+    func vocabularyOverlap(
+        _ transcript: Transcript,
+        _ beat: CanonicalBeat,
+        in story: GuidedStory
+    ) -> Int {
+        distinctiveWords(of: beat, in: story).count { transcript.contains(phrase: $0) }
+    }
+
     /// Whether the retelling contains anything only this event would have brought up.
     ///
     /// Both halves have to hold. Measured against the corpus this rejects seven of eleven

@@ -153,6 +153,19 @@ struct SourceMatcherTests {
         #expect(matcher.corroborates(retelling("he asked for the entire sea"), asking, in: story))
     }
 
+    /// The model denied events whose own vocabulary was plainly in the retelling. Counting the
+    /// overlap is what lets strong evidence outweigh that judgement.
+    @Test func vocabularyOverlapCountsHowMuchOfTheEventIsThere() {
+        let story = StoryLibrary.whatTheHouseKept
+        let letters = story.beat(2)!
+        let told = retelling(
+            "at the writing desk she found about sixty letters her mother wrote, all unopened"
+        )
+
+        #expect(matcher.vocabularyOverlap(told, letters, in: story) >= 3)
+        #expect(matcher.vocabularyOverlap(retelling("it was quite sad"), letters, in: story) == 0)
+    }
+
     @Test func aWordTwoEventsShareIsNotDistinctive() {
         let asking = story.beat(5)!
 

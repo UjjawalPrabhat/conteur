@@ -33,6 +33,14 @@ struct StoryComparison: SourceComparing {
     /// not open generation, so the permissive setting is the accurate one.
     private static let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
 
+    /// How much of an event's own vocabulary has to be present to overrule a denial.
+    ///
+    /// Measured against the corpus: three recovers three real coverages and wrongly credits
+    /// nothing, where two recovers a fourth and puts back a commentary sample that eight runs
+    /// went into clearing. The margin either side is a single sample, so this is the least
+    /// trustworthy number here.
+    private static let strongOverlap = 3
+
     /// One event per request.
     ///
     /// Asked about several at once the model answers per batch rather than per event: on every
@@ -70,9 +78,21 @@ struct StoryComparison: SourceComparing {
         // Commentary was over-credited in every run. The check is on the story's side: an
         // event that brings its own names with it did not happen in a retelling that never
         // says any of them.
-        let covered = claimed.filter {
+        let corroborated = claimed.filter {
             matcher.corroborates(transcript, $0.beat, in: story)
         }
+
+        // The same evidence read the other way. The model denied events whose own vocabulary
+        // was plainly present — five of the eight words belonging to one of them, in a
+        // retelling it said had not covered it. Where the evidence is that strong it outweighs
+        // the judgement. Unlocated on purpose: the words are scattered, and a one-word quote
+        // is not something to show anybody.
+        let denied = draft.mentions.filter { !$0.covered }.compactMap { story.beat($0.beat) }
+        let recovered = denied
+            .filter { matcher.vocabularyOverlap(transcript, $0, in: story) >= Self.strongOverlap }
+            .map { BeatCoverage(beat: $0, quote: nil, at: nil) }
+
+        let covered = corroborated + recovered
         let coveredIDs = Set(covered.map(\.beat.id))
         let judged = story.beats.filter { !draft.unresolved.contains($0.id) }
 
