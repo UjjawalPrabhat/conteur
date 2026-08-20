@@ -33,10 +33,6 @@ struct StoryComparison: SourceComparing {
     /// not open generation, so the permissive setting is the accurate one.
     private static let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
 
-    /// A retelling cannot cover more events than it has words for. Measured against the
-    /// faithful samples, which run 25 to 35 words per event told.
-    private static let wordsPerClaimedEvent = 20
-
     /// One event per request.
     ///
     /// Asked about several at once the model answers per batch rather than per event: on every
@@ -74,81 +70,84 @@ struct StoryComparison: SourceComparing {
         // Commentary was over-credited in every run. The check is on the story's side: an
         // event that brings its own names with it did not happen in a retelling that never
         // says any of them.
-        let corroborated = claimed.filter {
+        let covered = claimed.filter {
             matcher.corroborates(transcript, $0.beat, in: story)
         }
-        let plausible = Self.plausible(corroborated, in: transcript)
-        let coveredIDs = Set(plausible.map(\.beat.id))
+        let coveredIDs = Set(covered.map(\.beat.id))
+        let judged = story.beats.filter { !draft.unresolved.contains($0.id) }
 
         return SourceComparison(
             story: story,
-            covered: plausible,
-            omitted: story.beats.filter { !coveredIDs.contains($0.id) },
+            covered: covered,
+            omitted: judged.filter { !coveredIDs.contains($0.id) },
+            unresolved: story.beats.filter { draft.unresolved.contains($0.id) },
             mentionedEntities: entities.mentioned,
             omittedEntities: entities.omitted,
             inventedNames: matcher.inventedNames(in: transcript, from: story),
-            orderAccuracy: matcher.orderAccuracy(of: plausible),
+            orderAccuracy: matcher.orderAccuracy(of: covered),
             compression: Double(transcript.words.count) / Double(max(story.wordCount, 1)),
             conveyedStakes: draft.conveyedStakes
         )
     }
 
-    /// When a retelling stops early the model finishes the story from what it knows: one
-    /// sample told two events and was credited with all five. Claims it could not quote are
-    /// kept only up to what the retelling's length supports, since a located claim carries
-    /// its own evidence and an unlocated one carries none.
-    private static func plausible(_ covered: [BeatCoverage], in transcript: Transcript) -> [BeatCoverage] {
-        let located = covered.filter(\.isLocated)
-        let unlocated = covered.filter { !$0.isLocated }
-        let budget = transcript.words.count / wordsPerClaimedEvent - located.count
-        guard budget < unlocated.count else { return covered }
-        return located + unlocated.prefix(max(0, budget))
-    }
-
     private func coverage(
         of transcript: Transcript,
         against story: GuidedStory
-    ) async throws -> (mentions: [BeatMention], conveyedStakes: Bool) {
+    ) async throws -> (mentions: [BeatMention], unresolved: Set<Int>, conveyedStakes: Bool) {
         // Each event is judged on its own against the same retelling, so they are
         // independent and there is no reason to wait for one before asking the next. In
         // series the corpus took nearly seven minutes.
-        var judgements: [(id: Int, draft: CoverageDraft)] = []
-        try await withThrowingTaskGroup(of: (Int, CoverageDraft).self) { group in
+        var judgements: [(id: Int, draft: CoverageDraft?)] = []
+        var refusal: ModelFailure?
+        await withTaskGroup(of: (id: Int, draft: CoverageDraft?, failure: ModelFailure?).self) { group in
             var pending = story.beats.makeIterator()
 
             func addNext() {
                 guard let event = pending.next() else { return }
                 group.addTask {
-                    // An event that will not answer is thrown rather than treated as
-                    // uncovered: an unanswered event reported as an omission would blame the
-                    // speaker for a refusal.
-                    let draft = try await attempting {
-                        let session = LanguageModelSession(
-                            model: Self.model,
-                            instructions: Self.coverageInstructions
-                        )
-                        return try await session.respond(
-                            to: Self.brief(transcript, event),
-                            generating: CoverageDraft.self,
-                            options: Self.options
-                        ).content
+                    do {
+                        let draft = try await Self.attempting {
+                            let session = LanguageModelSession(
+                                model: Self.model,
+                                instructions: Self.coverageInstructions
+                            )
+                            return try await session.respond(
+                                to: Self.brief(transcript, event),
+                                generating: CoverageDraft.self,
+                                options: Self.options
+                            ).content
+                        }
+                        return (event.id, draft, nil)
+                    } catch {
+                        return (event.id, nil, ModelFailure(error))
                     }
-                    return (event.id, draft)
                 }
             }
 
             for _ in 0..<Self.concurrentJudgements { addNext() }
-            while let judgement = try await group.next() {
-                judgements.append(judgement)
+            while let judgement = await group.next() {
+                // One refused event used to fail the whole comparison, so a retelling of six
+                // events got no feedback at all because of the seventh. The guardrail refuses
+                // individual events unpredictably; the rest of the judgements are still good.
+                refusal = judgement.failure ?? refusal
+                judgements.append((judgement.id, judgement.draft))
                 addNext()
             }
         }
 
-        let mentions = judgements
-            .sorted { $0.id < $1.id }
-            .map { BeatMention(beat: $0.id, covered: $0.draft.covered, quote: $0.draft.quote) }
+        // Nothing was judged, so there is nothing to report. Only here is a refusal fatal.
+        if judgements.allSatisfy({ $0.draft == nil }), let refusal { throw refusal }
 
-        let stakes = try await attempting {
+        let answered = judgements.sorted { $0.id < $1.id }
+        let mentions = answered.compactMap { judgement -> BeatMention? in
+            guard let draft = judgement.draft else { return nil }
+            return BeatMention(beat: judgement.id, covered: draft.covered, quote: draft.quote)
+        }
+        let unresolved = Set(answered.filter { $0.draft == nil }.map(\.id))
+
+        // A refusal here is not fatal either: the point of the story is one finding among
+        // many, and losing it is no reason to lose the coverage as well.
+        let stakes = try? await Self.attempting {
             let session = LanguageModelSession(
                 model: Self.model,
                 instructions: Self.stakesInstructions
@@ -163,12 +162,12 @@ struct StoryComparison: SourceComparing {
         // Asked whether the point came through, it said yes for almost every sample including
         // the ones that narrated nothing. Made to quote the words that carry it, it has to
         // find them — and a quote that is not in the retelling is not evidence of anything.
-        let conveyed = transcript.locate(stakes.quote) != nil
+        let conveyed = stakes.flatMap { transcript.locate($0.quote) } != nil
 
-        return (mentions, conveyed)
+        return (mentions, unresolved, conveyed)
     }
 
-    private func attempting<T>(_ work: () async throws -> T) async throws -> T {
+    private static func attempting<T>(_ work: () async throws -> T) async throws -> T {
         var lastError: any Error = CancellationError()
         for _ in 0..<Self.attempts {
             do { return try await work() } catch { lastError = error }

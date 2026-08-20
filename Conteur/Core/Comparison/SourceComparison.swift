@@ -23,6 +23,10 @@ struct SourceComparison: Sendable {
     let story: GuidedStory
     let covered: [BeatCoverage]
     let omitted: [CanonicalBeat]
+    /// Events the model would not judge. Neither covered nor omitted: the guardrail refuses
+    /// individual events unpredictably, and reporting one as an omission would blame the
+    /// speaker for something they may well have told.
+    let unresolved: [CanonicalBeat]
     let mentionedEntities: [StoryEntity]
     let omittedEntities: [StoryEntity]
     /// Names spoken that appear nowhere in the story's cast. The clearest fidelity signal
@@ -39,6 +43,7 @@ struct SourceComparison: Sendable {
             story: story,
             covered: [],
             omitted: story.beats,
+            unresolved: [],
             mentionedEntities: [],
             omittedEntities: story.cast,
             inventedNames: [],

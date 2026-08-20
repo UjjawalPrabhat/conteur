@@ -36,6 +36,7 @@ struct ModelEvaluationView: View {
             row("Stakes", percent(summary.stakesAccuracy), note: "agreed on whether the point came through")
             row("Credited wrongly", "\(summary.totalFalsePositives)", note: "events it said were told that weren't")
             row("Missed", "\(summary.totalFalseNegatives)", note: "events told that it reported as omitted")
+            row("Unjudged", "\(summary.totalUnresolved)", note: "events it would not answer on, scored neither way")
             row(
                 "Answered",
                 "\(summary.answered.count) of \(summary.scores.count)",

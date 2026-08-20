@@ -6,6 +6,9 @@ struct SampleScore: Sendable, Identifiable {
     let sample: RetellingSample
     let reported: Set<Int>
     let located: Set<Int>
+    /// Events the model would not judge. Scored as neither hit nor miss, for the same reason a
+    /// refused sample is left out of the averages: it says nothing about the model's judgement.
+    let unresolved: Set<Int>
     let inventedNames: [String]
     let conveyedStakes: Bool
     let failure: String?
@@ -16,7 +19,7 @@ struct SampleScore: Sendable, Identifiable {
 
     var id: String { sample.id }
 
-    var expected: Set<Int> { sample.expectedBeats }
+    var expected: Set<Int> { sample.expectedBeats.subtracting(unresolved) }
     var hits: Set<Int> { reported.intersection(expected) }
     /// Events the model claimed were told that were not. The dangerous direction: it credits
     /// the speaker with something they never said.
@@ -68,6 +71,12 @@ struct EvaluationSummary: Sendable {
         answered.reduce(0) { $0 + $1.falseNegatives.count }
     }
 
+    /// Events no judgement came back for. Worth watching rather than averaging: a run where
+    /// many events go unjudged is a run whose feedback is quietly thin.
+    var totalUnresolved: Int {
+        answered.reduce(0) { $0 + $1.unresolved.count }
+    }
+
     var failures: [SampleScore] { scores.filter { $0.failure != nil } }
 
     func scores(for shape: RetellingSample.Shape) -> [SampleScore] {
@@ -106,6 +115,7 @@ struct ComparisonEvaluator: Sendable {
                 sample: sample,
                 reported: [],
                 located: [],
+                unresolved: [],
                 inventedNames: [],
                 conveyedStakes: false,
                 failure: "no story with id \(sample.storyID)",
@@ -119,6 +129,7 @@ struct ComparisonEvaluator: Sendable {
                 sample: sample,
                 reported: Set(comparison.covered.map(\.beat.id)),
                 located: Set(comparison.located.map(\.beat.id)),
+                unresolved: Set(comparison.unresolved.map(\.id)),
                 inventedNames: comparison.inventedNames.map(\.name),
                 conveyedStakes: comparison.conveyedStakes,
                 failure: nil,
@@ -130,6 +141,7 @@ struct ComparisonEvaluator: Sendable {
                 sample: sample,
                 reported: [],
                 located: [],
+                unresolved: [],
                 inventedNames: [],
                 conveyedStakes: false,
                 failure: kind == .other ? error.localizedDescription : kind.label,

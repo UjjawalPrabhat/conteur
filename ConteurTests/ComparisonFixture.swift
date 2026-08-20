@@ -59,6 +59,7 @@ enum Fixture {
             story: story,
             covered: covered,
             omitted: story.beats.filter { !coveredIDs.contains($0.id) },
+            unresolved: [],
             mentionedEntities: mentioned,
             omittedEntities: story.cast.filter { !names.contains($0.name) },
             inventedNames: inventing.enumerated().map { InventedName(name: $1, at: Double($0)) },

@@ -40,6 +40,18 @@ struct ComparisonEvaluatorTests {
         #expect(summary.quoteYield == 0)
     }
 
+    /// A refusal on one event used to fail the whole comparison, so three of fifteen samples
+    /// produced no feedback at all. Now the event is unresolved, and an unresolved event is
+    /// not a miss — reporting it as one would blame the speaker for a refusal.
+    @Test func anUnjudgedEventIsNeitherHitNorMiss() async {
+        let summary = await evaluate(.partlyRefused)
+
+        #expect(summary.answered.count == summary.scores.count)
+        #expect(summary.totalUnresolved > 0)
+        #expect(summary.totalFalseNegatives == 0)
+        #expect(summary.recall == 1)
+    }
+
     @Test func aThrownComparisonIsRecordedRatherThanScoredAsZero() async {
         let summary = await evaluate(.failing)
 
@@ -125,6 +137,8 @@ private struct StubComparer: SourceComparing {
         case underclaiming
         case unquotable
         case failing
+        /// Judged everything except one event the speaker did tell.
+        case partlyRefused
     }
 
     struct Failure: Error, LocalizedError {
@@ -144,9 +158,13 @@ private struct StubComparer: SourceComparing {
         switch behaviour {
         case .agreeing, .unquotable: reported = expected
         case .overclaiming: reported = expected.union(story.beats.map(\.id))
-        case .underclaiming: reported = Set(expected.sorted().dropLast())
+        case .underclaiming, .partlyRefused: reported = Set(expected.sorted().dropLast())
         case .failing: reported = []
         }
+
+        let unresolved: Set<Int> = behaviour == .partlyRefused
+            ? Set(expected.sorted().suffix(1))
+            : []
 
         let located = behaviour == .unquotable ? Set<Int>() : reported
         let covered = reported.sorted().enumerated().compactMap { index, id -> BeatCoverage? in
@@ -160,6 +178,7 @@ private struct StubComparer: SourceComparing {
             story: story,
             covered: covered,
             omitted: story.beats.filter { !reported.contains($0.id) },
+            unresolved: unresolved.compactMap { story.beat($0) },
             mentionedEntities: story.cast,
             omittedEntities: [],
             inventedNames: [],

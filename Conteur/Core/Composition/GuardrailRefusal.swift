@@ -4,12 +4,18 @@ import FoundationModels
 /// Why a model call produced nothing. Kept apart because they call for different responses:
 /// a refusal is worth retrying, a full context window means the request was too big, and
 /// anything else is a bug until shown otherwise.
-enum ModelFailure: String, Sendable {
+enum ModelFailure: String, LocalizedError, Sendable {
     case refused
     case contextExceeded
     case other
 
     init(_ error: any Error) {
+        // Already classified. Individual event judgements are classified where they fail,
+        // because `any Error` cannot cross a task boundary.
+        if let failure = error as? ModelFailure {
+            self = failure
+            return
+        }
         if let generation = error as? LanguageModelSession.GenerationError {
             switch generation {
             case .guardrailViolation: self = .refused; return
@@ -29,6 +35,8 @@ enum ModelFailure: String, Sendable {
             self = .other
         }
     }
+
+    var errorDescription: String? { label }
 
     var label: String {
         switch self {
