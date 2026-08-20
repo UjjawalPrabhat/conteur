@@ -18,7 +18,7 @@ struct SourceMatcher: Sendable {
         from story: GuidedStory
     ) -> (mentioned: [StoryEntity], omitted: [StoryEntity]) {
         let mentioned = story.cast.filter { entity in
-            entity.surfaceForms.contains { transcript.contains(phrase: $0) }
+            entity.surfaceForms.contains { transcript.mentions($0) }
         }
         let names = Set(mentioned.map(\.name))
         return (mentioned, story.cast.filter { !names.contains($0.name) })
@@ -86,14 +86,34 @@ struct SourceMatcher: Sendable {
         distinctiveWords(of: beat, in: story).count { transcript.contains(phrase: $0) }
     }
 
-    /// Whether the retelling contains anything only this event would have brought up.
+    /// Names that belong to one part of the story rather than running through it.
     ///
-    /// This was once two checks, and requiring a distinctive *name* as well threw out eight real
-    /// coverages out of nine misses: "the letters" does not match "full of letters", "the
-    /// briefcases" does not match "briefcase", and an event Mira is in was rejected because a
-    /// paraphrase never named her. Names are how a cast is tracked, not how an event is
-    /// recognised — the vocabulary check was already doing the work either of them could do.
+    /// The protagonist appears in every event, so their name corroborates nothing. A name that
+    /// turns up in only a couple of events does.
+    func distinctiveEntities(of beat: CanonicalBeat, in story: GuidedStory) -> [StoryEntity] {
+        let appearances = story.beats.reduce(into: [String: Int]()) { counts, beat in
+            for entity in beat.entities { counts[entity, default: 0] += 1 }
+        }
+        let threshold = Double(story.beats.count) / 2
+        return beat.entities
+            .filter { Double(appearances[$0] ?? 0) < threshold }
+            .compactMap { story.entity(named: $0) }
+    }
+
+    /// Whether the retelling contains anything only this event would have brought up: a name
+    /// belonging to this part of the story, and a word belonging to this event.
+    ///
+    /// Both are required. Dropping the name half credited two more events that were never told,
+    /// and events wrongly credited are the failure worth paying to avoid — the feedback then
+    /// praises a passage the speaker never spoke. Its matching was the real defect: exact
+    /// surface forms missed three real coverages on nothing but a determiner and a plural.
     func corroborates(_ transcript: Transcript, _ beat: CanonicalBeat, in story: GuidedStory) -> Bool {
+        let entities = distinctiveEntities(of: beat, in: story)
+        let named = entities.isEmpty || entities.contains { entity in
+            entity.surfaceForms.contains { transcript.mentions($0) }
+        }
+        guard named else { return false }
+
         let words = distinctiveWords(of: beat, in: story)
         return words.isEmpty || words.contains { transcript.contains(phrase: $0) }
     }
@@ -148,6 +168,28 @@ struct SourceMatcher: Sendable {
 extension Transcript {
     var normalizedText: String {
         words.map(\.normalized).joined(separator: " ")
+    }
+
+    /// Whether a name from the story was said, allowing for the ways speech differs from an
+    /// authored surface form.
+    ///
+    /// Exact matching cost six real coverages for two reasons and no others: "the letters" is
+    /// spoken as "full of letters", and "the briefcases" as "a different briefcase". A
+    /// determiner and a plural, so those are what is allowed to differ — nothing looser, since
+    /// the point of matching a name is that it was actually said.
+    func mentions(_ surfaceForm: String) -> Bool {
+        let words = surfaceForm
+            .lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .drop { ["the", "a", "an"].contains($0) }
+        guard let last = words.last else { return false }
+
+        let stem = words.dropLast()
+        let alternatives = last.count > 3 && last.hasSuffix("s")
+            ? [last, String(last.dropLast())]
+            : [last, last + "s"]
+        return alternatives.contains { contains(phrase: (stem + [$0]).joined(separator: " ")) }
     }
 
     /// Whether the retelling contains a phrase, matched on whole words.

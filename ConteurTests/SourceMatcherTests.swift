@@ -105,17 +105,32 @@ struct SourceMatcherTests {
         #expect(matcher.corroborates(told, bargain, in: story))
     }
 
-    /// Naming the cast is how a cast is tracked, not how an event is recognised. Requiring a
-    /// name threw out eight real coverages: a paraphrase told these events without saying Mira.
-    @Test func anEventIsCorroboratedWithoutItsCastBeingNamed() throws {
-        let paraphrased = try #require(
-            RetellingCorpus.all.first { $0.storyID == story.id && $0.shape == .paraphrased }
+    /// The defect that made the name check look worthless: these cost six real coverages, and
+    /// the whole difference was a determiner and a plural.
+    @Test func aNameIsRecognisedThroughADeterminerOrAPlural() throws {
+        let houseKept = StoryLibrary.whatTheHouseKept
+        let letters = try #require(houseKept.beat(2))
+        let faithful = try #require(
+            RetellingCorpus.all.first { $0.storyID == houseKept.id && $0.shape == .faithful }
         )
 
-        let ending = try #require(story.beat(7))
-        #expect(ending.entities.contains("Mira"))
-        #expect(paraphrased.transcript.contains(phrase: "Mira") == false)
-        #expect(matcher.corroborates(paraphrased.transcript, ending, in: story))
+        #expect(faithful.transcript.contains(phrase: "the letters") == false)
+        #expect(faithful.transcript.mentions("the letters"))
+        #expect(matcher.corroborates(faithful.transcript, letters, in: houseKept))
+    }
+
+    @Test func aPluralNameIsRecognisedFromItsSingular() {
+        let told = retelling("he carried a different briefcase every single morning")
+
+        #expect(told.mentions("the briefcases"))
+        #expect(told.mentions("the envelopes") == false)
+    }
+
+    /// Nothing looser than that. The point of matching a name is that it was actually said.
+    @Test func aDifferentWordIsNotTheSameName() {
+        let told = retelling("she found a pile of postcards in the desk")
+
+        #expect(told.mentions("the letters") == false)
     }
 
     /// The limit of the same check, stated so it is not mistaken for a bug later: an event a
