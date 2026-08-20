@@ -38,7 +38,6 @@ struct RuleBasedDiagnosis: Diagnosing {
         // Need only the recording
         RestartRule(),
         MonotoneRule(),
-        FlatClimaxRule(),
         FilledPauseRule(),
         StallRule(),
         RushedClimaxRule(),

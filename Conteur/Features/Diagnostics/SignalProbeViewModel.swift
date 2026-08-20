@@ -17,22 +17,18 @@ final class SignalProbeViewModel {
 
     private let transcriber: any Transcribing
     private let audio = AudioCapture()
-    private let face = FaceCapture()
     private let delivery = DeliveryAnalyzer()
     private let prosody = ProsodyAnalyzer()
-    private let expressivity = ExpressivityAnalyzer()
     private var session: Task<Void, Never>?
 
     private var transcript = Transcript.empty
     private var frames: [ProsodyFrame] = []
-    private var expressions: [ExpressionSample] = []
 
     init(transcriber: any Transcribing) {
         self.transcriber = transcriber
     }
 
     var isListening: Bool { state == .listening }
-    var faceTrackingAvailable: Bool { FaceCapture.isSupported }
 
     func start() {
         guard session == nil else { return }
@@ -44,16 +40,13 @@ final class SignalProbeViewModel {
                 let format = try await transcriber.preferredAudioFormat()
                 let speech = await audio.chunks()
                 let sound = await audio.chunks()
-                let faces = face.samples()
 
                 try await audio.start(convertingTo: format)
-                face.start()
                 state = .listening
 
                 await withTaskGroup { group in
                     group.addTask { [weak self] in await self?.consumeTranscript(of: speech) }
                     group.addTask { [weak self] in await self?.consumeProsody(of: sound) }
-                    group.addTask { [weak self] in await self?.consumeExpressions(of: faces) }
                 }
 
                 if case .failed = state {} else { state = .finished }
@@ -65,7 +58,6 @@ final class SignalProbeViewModel {
     }
 
     func stop() async {
-        face.stop()
         await audio.stop()
         await session?.value
     }
@@ -88,26 +80,18 @@ final class SignalProbeViewModel {
         }
     }
 
-    private func consumeExpressions(of samples: AsyncStream<ExpressionSample>) async {
-        for await sample in samples {
-            expressions.append(sample)
-            rebuild()
-        }
-    }
 
     private func rebuild() {
         timeline = FeatureTimeline(
             transcript: transcript,
             delivery: delivery.analyze(transcript),
             prosody: frames,
-            expressivity: expressivity.windows(from: expressions)
         )
     }
 
     private func reset() {
         transcript = .empty
         frames = []
-        expressions = []
         timeline = .empty
     }
 }

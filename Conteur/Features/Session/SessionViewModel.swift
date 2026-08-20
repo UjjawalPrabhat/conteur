@@ -38,9 +38,6 @@ final class SessionViewModel {
     /// True through a pause, when a listener would visibly hold your gaze.
     private(set) var isAttending = false
 
-    /// The self-view and how the face is reading right now.
-    private(set) var selfView: CGImage?
-    private(set) var reading = ExpressionReading.still
 
     private(set) var elapsed: TimeInterval = 0
 
@@ -58,12 +55,8 @@ final class SessionViewModel {
     private let speech: any Speaking
 
     private let audio = AudioCapture()
-    private let face = FaceCapture()
     private let delivery = DeliveryAnalyzer()
     private let prosody = ProsodyAnalyzer()
-    private let expressivity = ExpressivityAnalyzer()
-    private let reader = ExpressionReader()
-    private var neutral = ExpressionBaseline()
 
     private let story: GuidedStory
     private var baseline: Baseline = .none
@@ -75,7 +68,6 @@ final class SessionViewModel {
 
     private var transcript = Transcript.empty
     private var frames: [ProsodyFrame] = []
-    private var expressions: [ExpressionSample] = []
     private var session: Task<Void, Never>?
     private var quietSince: TimeInterval?
     /// Set when the telling is walked away from, so the analysis is skipped rather than
@@ -117,18 +109,13 @@ final class SessionViewModel {
                 let format = try await transcriber.preferredAudioFormat()
                 let speech = await audio.chunks()
                 let sound = await audio.chunks()
-                let faces = face.samples()
-                let views = face.previewFrames()
 
                 try await audio.start(convertingTo: format)
-                face.start()
                 phase = .listening
 
                 await withTaskGroup { group in
                     group.addTask { [weak self] in await self?.readTranscript(from: speech) }
                     group.addTask { [weak self] in await self?.readProsody(from: sound) }
-                    group.addTask { [weak self] in await self?.readExpressions(from: faces) }
-                    group.addTask { [weak self] in await self?.showSelf(from: views) }
                 }
 
                 try await respond()
@@ -149,7 +136,6 @@ final class SessionViewModel {
     /// Stops the microphone without waiting for analysis, so it is safe to call from
     /// inside the session's own task when the time limit is reached.
     private func endCapture() {
-        face.stop()
         Task { await audio.stop() }
     }
 
@@ -184,21 +170,6 @@ final class SessionViewModel {
             frames.append(frame)
             observe(loudness: frame.loudness, at: frame.at)
         }
-    }
-
-    private func readExpressions(from samples: AsyncStream<ExpressionSample>) async {
-        for await sample in samples {
-            expressions.append(sample)
-            neutral.observe(sample)
-            reading = reader.read(neutral.departure(from: sample))
-        }
-    }
-
-    private func showSelf(from frames: AsyncStream<CameraFrame>) async {
-        for await frame in frames {
-            selfView = frame.image
-        }
-        selfView = nil
     }
 
     // MARK: - Presence
@@ -249,8 +220,7 @@ final class SessionViewModel {
         let timeline = FeatureTimeline(
             transcript: transcript,
             delivery: delivery.analyze(transcript),
-            prosody: frames,
-            expressivity: expressivity.windows(from: expressions)
+            prosody: frames
         )
         // One comparison against the story, in one model session. The whole map-reduce
         // existed only because structure had to be inferred with nothing to compare to.
@@ -311,8 +281,6 @@ final class SessionViewModel {
     private func reset() {
         transcript = .empty
         frames = []
-        expressions = []
-        neutral = ExpressionBaseline()
         elapsed = 0
         isAbandoned = false
         assessment = nil

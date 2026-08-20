@@ -122,40 +122,6 @@ struct MonotoneRule: DiagnosticRule {
     }
 }
 
-/// A face that stays still through the moment the story turns on.
-///
-/// The turning point is authored, and the comparison says when the reteller reached it, so
-/// this now checks the exact moment rather than a moment the model nominated.
-struct FlatClimaxRule: DiagnosticRule {
-    private static let stillness: Float = 0.02
-
-    let dimension = Dimension.engagement
-
-    func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.comparison.locatedClimax != nil && !input.timeline.expressivity.isEmpty
-    }
-
-    func findings(in input: DiagnosticInput) -> [Finding] {
-        guard
-            let climax = input.comparison.locatedClimax,
-            let at = climax.at,
-            let variation = input.timeline.expressivity(at: at),
-            variation < Self.stillness
-        else { return [] }
-
-        return [
-            Finding(
-                dimension: dimension,
-                subject: "climax-expression",
-                observation: "your face stayed still through the turning point at \(at.timestampLabel)",
-                magnitude: Double(Self.stillness - variation),
-                weight: 0.25,
-                evidence: [.at(at, quote: climax.quote)]
-            )
-        ]
-    }
-}
-
 /// Speeding up through the moment that most deserves room.
 struct RushedClimaxRule: DiagnosticRule {
     /// A fifth faster than the speaker's own average is enough to hear.

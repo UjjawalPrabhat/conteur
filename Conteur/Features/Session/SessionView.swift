@@ -39,12 +39,6 @@ struct SessionView: View {
             Color(.systemBackground).ignoresSafeArea()
 
             VStack {
-                if model.isListening {
-                    SelfView(image: model.selfView, reading: model.reading)
-                        .padding(.top, 12)
-                        .transition(.opacity)
-                }
-
                 Spacer()
                 ListeningPresence(
                     level: model.level,

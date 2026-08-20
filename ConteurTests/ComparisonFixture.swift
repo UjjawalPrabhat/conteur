@@ -79,8 +79,7 @@ enum Fixture {
             timeline: FeatureTimeline(
                 transcript: transcript,
                 delivery: DeliveryAnalyzer().analyze(transcript),
-                prosody: [],
-                expressivity: []
+                prosody: []
             ),
             comparison: comparison
         )

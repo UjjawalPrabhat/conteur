@@ -13,8 +13,8 @@ Then you tell it again.
 ## Getting started
 
 **You need an iPhone 15 Pro or newer**, on iOS 26, with Apple Intelligence turned on.
-Apple's on-device model and TrueDepth face tracking are both hard requirements and there
-is no fallback path. Nothing but the tests runs in the simulator.
+Apple's on-device model is a hard requirement and there is no fallback path. Nothing but
+the tests runs in the simulator.
 
 ```bash
 sudo xcode-select -s /Applications/Xcode.app     # once, if xcodebuild can't find the SDK
@@ -65,11 +65,8 @@ to tell it again against that one thing.
 
 ## What it keeps
 
-**Nothing is recorded.** Not video, not audio.
-
-The camera runs so ARKit can read facial expression, but frames are read for blendshape
-coefficients and dropped. The microphone is transcribed as you speak, and the audio
-buffers are analysed and discarded — no file is ever written.
+**Nothing is recorded.** The microphone is transcribed as you speak, and the audio buffers
+are analysed and discarded — no file is ever written. The camera is not used at all.
 
 What survives a session is **text**: the transcript, the feedback, and per-dimension
 scores. That is what history shows you and what progress is measured from.
@@ -88,8 +85,6 @@ observed yet:
 - Whether `SpeechTranscriber` preserves `"um"` and `"uh"` at all. If it strips them,
   `FilledPauseRule` has no input and filler detection has to move to acoustic analysis.
 - How long Pass B plus composition take after the speaker stops.
-- Whether the expression thresholds hold up against real faces rather than synthetic
-  test values.
 
 `SignalProbeView` in `Conteur/Features/Diagnostics/` exists for exactly this — it dumps
 raw measurements from a short recording. Point `ConteurApp` at it instead of `RootView`

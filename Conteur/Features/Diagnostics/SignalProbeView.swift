@@ -12,7 +12,6 @@ struct SignalProbeView: View {
                 pace
                 pauses
                 voice
-                face
                 restarts
                 transcript
                 failure
@@ -56,24 +55,6 @@ struct SignalProbeView: View {
             LabeledContent("Voiced frames", value: "\(model.timeline.prosody.count(where: { $0.pitch != nil }))")
             LabeledContent("Pitch variation", value: percent(Double(model.timeline.pitchVariation)))
             LabeledContent("Dynamic range", value: number(Double(model.timeline.dynamicRange), places: 1) + "×")
-        }
-    }
-
-    private var face: some View {
-        Section("Face") {
-            if model.faceTrackingAvailable {
-                LabeledContent("Windows", value: "\(model.timeline.expressivity.count)")
-                ForEach(model.timeline.expressivity, id: \.start) { window in
-                    LabeledContent(
-                        seconds(window.start),
-                        value: number(Double(window.variation), places: 3)
-                    )
-                    .monospaced()
-                }
-            } else {
-                Text("Face tracking unavailable on this device.")
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 

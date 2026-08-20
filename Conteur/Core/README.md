@@ -25,7 +25,7 @@ flowchart LR
         P["Write 4 sentences from<br/>supplied facts<br/><i>phrasing</i>"]
     end
     subgraph swift["Swift — everything that decides"]
-        T["timings · pitch · expression"]
+        T["timings · pitch · loudness"]
         E["entity tracking"]
         A["time accounting"]
         S["scoring · weakness selection"]
@@ -45,7 +45,6 @@ That reframing is what makes a 3B model sufficient.
 ```mermaid
 flowchart TD
     mic["🎙 AVAudioEngine"] --> fan{{"AudioFanout<br/>one tap, three consumers"}}
-    cam["📷 ARFaceTrackingConfiguration"] --> face["FaceCapture"]
 
     fan --> tx["Transcription"]
     fan --> pr["Prosody"]
@@ -53,7 +52,6 @@ flowchart TD
 
     tx --> tl["FeatureTimeline"]
     pr --> tl
-    face --> tl
 
     tx --> chunk["TranscriptChunker"]
     chunk --> passA["Pass A · label each chunk"]
@@ -92,13 +90,9 @@ actor.
 |---|---|---|
 | `AudioCapture.chunks()` | [Capture/AudioCapture.swift](Capture/AudioCapture.swift) | call once per consumer, before `start` |
 | `AudioCapture.start(convertingTo:)` | " | converts to the format `SpeechAnalyzer` asks for |
-| `FaceCapture.samples()` | [Capture/FaceCapture.swift](Capture/FaceCapture.swift) | 14 blendshape channels at 10Hz |
-| `FaceCapture.previewFrames()` | " | 320px stills at 15fps for the self-view |
 
-**Nothing is recorded — audio or video.** `FaceCapture` reads exactly two things off each
-ARKit frame, `blendShapes` and `timestamp`, and the preview is converted, handed to the
-view and dropped. Audio buffers are transcribed and analysed as they arrive and are never
-written to disk. The transcript is the only thing that outlives the session.
+**Nothing is recorded.** Audio buffers are transcribed and analysed as they arrive and are
+never written to disk. The transcript is the only thing that outlives the session.
 
 ---
 
@@ -136,27 +130,9 @@ interjections), and restarts found as repeated 2–4 word n-grams.
 Autocorrelation over 70–350 Hz via `vDSP_dotpr`; correlation below `0.3` means unvoiced.
 Gives the pitch contour the transcript cannot.
 
-**`ExpressionBaseline` → `ExpressionReader.read(_:)`** — [Signal/](Signal/)
-Resting faces differ, so absolute thresholds label one person permanently tense and
-another permanently flat. `ExpressionBaseline` learns *your* neutral (falls fast toward
-lower readings, rises at `0.002` so a held expression is not absorbed), and the reader
-works on **departures from it**:
-
-```mermaid
-flowchart LR
-    raw["52 blendshapes"] --> keep["14 kept"]
-    keep --> base["− your neutral"]
-    base --> mv["brows · eyes · mouth · squint"]
-    mv --> imp["flat · animated · warm<br/>tense · sombre · surprised"]
-```
-
-`jawOpen` is excluded from the stillness gate — speaking holds it open continuously, so
-counting it would measure *whether you are talking*, not whether your face is doing
-anything.
-
 Everything lands in **`FeatureTimeline`** — [Signal/FeatureTimeline.swift](Signal/FeatureTimeline.swift) —
-which exposes `pitchVariation`, `dynamicRange`, `wordsPerMinute(in:)`,
-`expressivity(at:)` and `words(in:)` for the rules to query.
+which exposes `pitchVariation`, `dynamicRange`, `wordsPerMinute(in:)` and `words(in:)`
+for the rules to query.
 
 ---
 
@@ -254,7 +230,6 @@ of you is not simultaneously described as a strength.
 | `TimeAllocationRule` | relevance | > 25% of time on lowValue/offTopic | 0.35 |
 | `StakesGapRule` | engagement | ≥2 core beats, no beat states stakes | 0.40 |
 | `MonotoneRule` | engagement | pitch variation < 0.12 | 0.30 |
-| `FlatClimaxRule` | engagement | expressivity < 0.02 at the climax | 0.25 |
 | `FilledPauseRule` | delivery | filler rate > 4% (≥50 words) | 0.20 |
 | `StallRule` | delivery | > 2 silences over 3s | 0.25 |
 | `RushedClimaxRule` | delivery | climax > 1.2× your own average pace | 0.25 |
@@ -414,7 +389,7 @@ rests on a 3B model's opinion of narrative value.
 `statesStakes` is **Labov's evaluation**: the clauses telling a listener why the story was
 worth telling at all. This is the strongest research link in the codebase.
 
-`MonotoneRule` and `FlatClimaxRule` are **○ invented**. Prosodic expressiveness has a
+`MonotoneRule` is **○ invented**. Prosodic expressiveness has a
 literature; we did not operationalise from it.
 
 ### Delivery ●
@@ -432,9 +407,7 @@ the same literature.
 
 ### Everything else ○
 
-`StoryShape`, `ConveyedImpression`, every numeric threshold, the importance weights, and
-the band boundaries. `ConveyedImpression` deliberately avoids mapping to Ekman's basic
-emotions, though the ARKit blendshapes underneath it correspond to FACS action units.
+`StoryShape`, every numeric threshold, the importance weights, and the band boundaries.
 
 ---
 
@@ -464,8 +437,6 @@ rather than the worst.
 - Barzilay & Lapata (2008), *Modeling Local Coherence: An Entity-Based Approach*
 - Levelt (1983), *Monitoring and Self-Repair in Speech*
 - Segalowitz (2010), *Cognitive Bases of Second Language Fluency*; Skehan on speed/breakdown/repair fluency
-- Ekman & Friesen (1978), *Facial Action Coding System*
-- Barrett et al. (2019), *Emotional Expressions Reconsidered* — why `ConveyedImpression` describes what a face conveys rather than what it feels
 
 ---
 
