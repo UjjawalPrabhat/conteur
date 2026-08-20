@@ -28,10 +28,14 @@ struct StoryComparison: SourceComparing {
     /// faithful samples, which run 25 to 35 words per event told.
     private static let wordsPerClaimedEvent = 20
 
-    /// Asked about every event at once, the model drops the tail of the list — it missed the
-    /// last three events of a seven-event story. Refusals also tracked prompt length, with the
-    /// short samples answered and the long ones refused. Smaller requests address both.
-    private static let eventsPerRequest = 3
+    /// One event per request.
+    ///
+    /// Asked about several at once the model answers per batch rather than per event: on every
+    /// commentary sample it credited exactly the first batch of three and nothing after it,
+    /// which is position rather than judgement. Batching three at a time had already cut
+    /// refusals from nine samples to one; going to one removes the anchoring as well, at the
+    /// cost of one small call per event.
+    private static let eventsPerRequest = 1
 
     /// Refusals are not reproducible: the same sample was answered on one run and refused on
     /// the next. One retry is worth more than it costs.
@@ -121,7 +125,12 @@ struct StoryComparison: SourceComparing {
             ).content
         }
 
-        return (mentions, stakes.conveyed)
+        // Asked whether the point came through, it said yes for almost every sample including
+        // the ones that narrated nothing. Made to quote the words that carry it, it has to
+        // find them — and a quote that is not in the retelling is not evidence of anything.
+        let conveyed = transcript.locate(stakes.quote) != nil
+
+        return (mentions, conveyed)
     }
 
     private func attempting<T>(_ work: () async throws -> T) async throws -> T {
@@ -172,8 +181,11 @@ struct StoryComparison: SourceComparing {
         Somebody read a short story and then retold it from memory. You are given the point of
         the story and what they said.
 
-        Say only whether they got that point across. Recounting what happened is not enough on
-        its own — the point has to come through.
+        Quote the words they said that get that point across. Copy them exactly as they said
+        them.
+
+        If they only recounted what happened, or never reached the point at all, answer with
+        nothing. Do not write a quote they did not say.
         """
 }
 
@@ -185,8 +197,8 @@ private struct CoverageDraft {
 
 @Generable
 private struct StakesDraft {
-    @Guide(description: "True only if the point of the story came through, not just the events.")
-    var conveyed: Bool
+    @Guide(description: "The words they said that get the point across. Empty if they never did.")
+    var quote: String
 }
 
 @Generable
