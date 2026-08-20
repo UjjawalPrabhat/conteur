@@ -62,20 +62,6 @@ struct SourceMatcher: Sendable {
         return invented
     }
 
-    /// Names that belong to one part of the story rather than running through it.
-    ///
-    /// The protagonist appears in every event, so their name corroborates nothing. A name that
-    /// turns up in only a couple of events does.
-    func distinctiveEntities(of beat: CanonicalBeat, in story: GuidedStory) -> [StoryEntity] {
-        let appearances = story.beats.reduce(into: [String: Int]()) { counts, beat in
-            for entity in beat.entities { counts[entity, default: 0] += 1 }
-        }
-        let threshold = Double(story.beats.count) / 2
-        return beat.entities
-            .filter { Double(appearances[$0] ?? 0) < threshold }
-            .compactMap { story.entity(named: $0) }
-    }
-
     /// Words this event's summary uses that no other event's does.
     ///
     /// Naming the cast is not telling an event — the model credited events on the strength of
@@ -102,17 +88,12 @@ struct SourceMatcher: Sendable {
 
     /// Whether the retelling contains anything only this event would have brought up.
     ///
-    /// Both halves have to hold. Measured against the corpus this rejects seven of eleven
-    /// wrongly credited events and costs one real coverage — and the failure it removes is the
-    /// one worth paying for, since crediting an event that was never told sends the feedback
-    /// somewhere the speaker never went.
+    /// This was once two checks, and requiring a distinctive *name* as well threw out eight real
+    /// coverages out of nine misses: "the letters" does not match "full of letters", "the
+    /// briefcases" does not match "briefcase", and an event Mira is in was rejected because a
+    /// paraphrase never named her. Names are how a cast is tracked, not how an event is
+    /// recognised — the vocabulary check was already doing the work either of them could do.
     func corroborates(_ transcript: Transcript, _ beat: CanonicalBeat, in story: GuidedStory) -> Bool {
-        let entities = distinctiveEntities(of: beat, in: story)
-        let named = entities.isEmpty || entities.contains { entity in
-            entity.surfaceForms.contains { transcript.contains(phrase: $0) }
-        }
-        guard named else { return false }
-
         let words = distinctiveWords(of: beat, in: story)
         return words.isEmpty || words.contains { transcript.contains(phrase: $0) }
     }

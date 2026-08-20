@@ -23,6 +23,10 @@ struct SourceComparison: Sendable {
     let story: GuidedStory
     let covered: [BeatCoverage]
     let omitted: [CanonicalBeat]
+    /// Events the model said were told that the corroboration check threw out. Reported so the
+    /// two mechanisms can be told apart: eight misses were read as the model's judgement for
+    /// three runs when they were this check rejecting real coverage.
+    let rejected: [CanonicalBeat]
     /// Events the model would not judge. Neither covered nor omitted: the guardrail refuses
     /// individual events unpredictably, and reporting one as an omission would blame the
     /// speaker for something they may well have told.
@@ -43,6 +47,7 @@ struct SourceComparison: Sendable {
             story: story,
             covered: [],
             omitted: story.beats,
+            rejected: [],
             unresolved: [],
             mentionedEntities: [],
             omittedEntities: story.cast,

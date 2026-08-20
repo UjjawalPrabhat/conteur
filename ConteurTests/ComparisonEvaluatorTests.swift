@@ -178,6 +178,7 @@ private struct StubComparer: SourceComparing {
             story: story,
             covered: covered,
             omitted: story.beats.filter { !reported.contains($0.id) },
+            rejected: [],
             unresolved: unresolved.compactMap { story.beat($0) },
             mentionedEntities: story.cast,
             omittedEntities: [],

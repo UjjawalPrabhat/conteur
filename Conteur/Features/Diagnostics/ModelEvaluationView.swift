@@ -36,6 +36,11 @@ struct ModelEvaluationView: View {
             row("Stakes", percent(summary.stakesAccuracy), note: "agreed on whether the point came through")
             row("Credited wrongly", "\(summary.totalFalsePositives)", note: "events it said were told that weren't")
             row("Missed", "\(summary.totalFalseNegatives)", note: "events told that it reported as omitted")
+            row(
+                "Rejected",
+                "\(summary.totalRejected)",
+                note: "claims our own check threw out — \(summary.wronglyRejected) of them real"
+            )
             row("Unjudged", "\(summary.totalUnresolved)", note: "events it would not answer on, scored neither way")
             row(
                 "Answered",
@@ -101,6 +106,11 @@ struct ModelEvaluationView: View {
                             Text("missed: \(list(score.falseNegatives))")
                                 .font(.caption)
                                 .foregroundStyle(.orange)
+                        }
+                        if !score.rejected.isEmpty {
+                            Text("rejected by our check: \(list(score.rejected))")
+                                .font(.caption)
+                                .foregroundStyle(.yellow)
                         }
                         if !score.inventedNames.isEmpty {
                             Text("invented: \(score.inventedNames.joined(separator: ", "))")

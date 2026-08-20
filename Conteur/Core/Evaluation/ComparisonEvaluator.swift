@@ -9,6 +9,9 @@ struct SampleScore: Sendable, Identifiable {
     /// Events the model would not judge. Scored as neither hit nor miss, for the same reason a
     /// refused sample is left out of the averages: it says nothing about the model's judgement.
     let unresolved: Set<Int>
+    /// Events the model claimed that corroboration threw out. Not scored — watched, because a
+    /// check of ours rejecting real coverage looks exactly like the model missing it.
+    let rejected: Set<Int>
     let inventedNames: [String]
     let conveyedStakes: Bool
     let failure: String?
@@ -77,6 +80,15 @@ struct EvaluationSummary: Sendable {
         answered.reduce(0) { $0 + $1.unresolved.count }
     }
 
+    /// Claims our own corroboration threw out, and how many of them were real.
+    var totalRejected: Int {
+        answered.reduce(0) { $0 + $1.rejected.count }
+    }
+
+    var wronglyRejected: Int {
+        answered.reduce(0) { $0 + $1.rejected.intersection($1.sample.expectedBeats).count }
+    }
+
     var failures: [SampleScore] { scores.filter { $0.failure != nil } }
 
     func scores(for shape: RetellingSample.Shape) -> [SampleScore] {
@@ -116,6 +128,7 @@ struct ComparisonEvaluator: Sendable {
                 reported: [],
                 located: [],
                 unresolved: [],
+                rejected: [],
                 inventedNames: [],
                 conveyedStakes: false,
                 failure: "no story with id \(sample.storyID)",
@@ -130,6 +143,7 @@ struct ComparisonEvaluator: Sendable {
                 reported: Set(comparison.covered.map(\.beat.id)),
                 located: Set(comparison.located.map(\.beat.id)),
                 unresolved: Set(comparison.unresolved.map(\.id)),
+                rejected: Set(comparison.rejected.map(\.id)),
                 inventedNames: comparison.inventedNames.map(\.name),
                 conveyedStakes: comparison.conveyedStakes,
                 failure: nil,
@@ -142,6 +156,7 @@ struct ComparisonEvaluator: Sendable {
                 reported: [],
                 located: [],
                 unresolved: [],
+                rejected: [],
                 inventedNames: [],
                 conveyedStakes: false,
                 failure: kind == .other ? error.localizedDescription : kind.label,

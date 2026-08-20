@@ -89,41 +89,44 @@ struct SourceMatcherTests {
 
     // MARK: - Corroboration
 
-    /// The protagonist is in every event, so their name is no evidence that any particular one
-    /// was told.
-    @Test func aNameRunningThroughTheWholeStoryIsNotDistinctive() {
-        let opening = story.beats[0]
-
-        let distinctive = matcher.distinctiveEntities(of: opening, in: story).map(\.name)
-
-        #expect(distinctive.contains("Aren") == false)
-    }
-
-    /// Mira is in three of seven events; Aren is in all of them. The fish is in four, so it
-    /// runs through the story rather than belonging to a part of it, and corroborates little.
-    @Test func aNameBelongingToOneStretchIsDistinctive() {
-        let ending = story.beat(7)!
-
-        let distinctive = matcher.distinctiveEntities(of: ending, in: story).map(\.name)
-
-        #expect(distinctive.contains("Mira"))
-        #expect(distinctive.contains("Aren") == false)
-    }
-
-    /// Commentary was over-credited in every evaluation run. An event that brings its own name
-    /// with it did not happen in a retelling that never says it.
-    @Test func anEventIsNotCorroboratedWhenItsOwnNamesAreAbsent() {
+    /// Commentary was over-credited in every evaluation run. An event that brings its own words
+    /// with it did not happen in a retelling that says none of them.
+    @Test func anEventIsNotCorroboratedWhenNothingOfItIsThere() {
         let bargain = story.beat(3)!
         let commentary = retelling("I thought it was quite bleak. Aren deserved better.")
 
         #expect(matcher.corroborates(commentary, bargain, in: story) == false)
     }
 
-    @Test func anEventIsCorroboratedWhenItsNameIsThere() {
+    @Test func anEventIsCorroboratedWhenItsOwnWordsAreThere() {
         let bargain = story.beat(3)!
         let told = retelling("he pulled up a silver fish and it spoke to him")
 
         #expect(matcher.corroborates(told, bargain, in: story))
+    }
+
+    /// Naming the cast is how a cast is tracked, not how an event is recognised. Requiring a
+    /// name threw out eight real coverages: a paraphrase told these events without saying Mira.
+    @Test func anEventIsCorroboratedWithoutItsCastBeingNamed() throws {
+        let paraphrased = try #require(
+            RetellingCorpus.all.first { $0.storyID == story.id && $0.shape == .paraphrased }
+        )
+
+        let ending = try #require(story.beat(7))
+        #expect(ending.entities.contains("Mira"))
+        #expect(paraphrased.transcript.contains(phrase: "Mira") == false)
+        #expect(matcher.corroborates(paraphrased.transcript, ending, in: story))
+    }
+
+    /// The limit of the same check, stated so it is not mistaken for a bug later: an event a
+    /// paraphrase tells in none of its own words cannot be corroborated, and is missed.
+    @Test func anEventToldEntirelyInOtherWordsIsStillMissed() throws {
+        let paraphrased = try #require(
+            RetellingCorpus.all.first { $0.storyID == story.id && $0.shape == .paraphrased }
+        )
+        let opening = try #require(story.beat(1))
+
+        #expect(matcher.vocabularyOverlap(paraphrased.transcript, opening, in: story) == 0)
     }
 
     /// An event carrying no distinctive name used to be waved through, which is how commentary
@@ -132,7 +135,6 @@ struct SourceMatcherTests {
         let story = StoryLibrary.theNineFifteen
         let waiting = story.beat(4)!
 
-        #expect(matcher.distinctiveEntities(of: waiting, in: story).isEmpty)
         #expect(matcher.corroborates(retelling("she waited there"), waiting, in: story) == false)
         #expect(
             matcher.corroborates(

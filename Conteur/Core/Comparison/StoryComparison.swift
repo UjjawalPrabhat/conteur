@@ -81,6 +81,9 @@ struct StoryComparison: SourceComparing {
         let corroborated = claimed.filter {
             matcher.corroborates(transcript, $0.beat, in: story)
         }
+        let rejected = claimed.filter {
+            !matcher.corroborates(transcript, $0.beat, in: story)
+        }
 
         // The same evidence read the other way. The model denied events whose own vocabulary
         // was plainly present — five of the eight words belonging to one of them, in a
@@ -100,6 +103,7 @@ struct StoryComparison: SourceComparing {
             story: story,
             covered: covered,
             omitted: judged.filter { !coveredIDs.contains($0.id) },
+            rejected: rejected.map(\.beat),
             unresolved: story.beats.filter { draft.unresolved.contains($0.id) },
             mentionedEntities: entities.mentioned,
             omittedEntities: entities.omitted,
