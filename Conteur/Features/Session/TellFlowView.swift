@@ -27,6 +27,10 @@ struct TellFlowView: View {
     var body: some View {
         NavigationStack {
             content
+                // The feedback fades in rather than sliding. A push reads as going somewhere
+                // else; this is the fire answering, and it should arrive where you are.
+                .animation(.easeInOut(duration: 0.35), value: stage)
+                .transition(.opacity)
         }
         // The tab bar is a distraction while somebody is mid-story, so it goes away for
         // the telling and comes back afterwards.

@@ -16,6 +16,9 @@ final class StoredRetelling {
     /// against constant difficulty rather than whatever was read that week.
     var isBenchmark: Bool = false
 
+    /// Which story was told. Kept as text rather than an id: the record has to stay
+    /// readable if the library ever changes underneath it.
+    var storyTitle: String?
     var focus: String?
     var note: String?
     var challenge: String?
@@ -33,6 +36,7 @@ final class StoredRetelling {
         groupID: UUID? = nil,
         attempt: Int = 1,
         isBenchmark: Bool = false,
+        storyTitle: String? = nil,
         focus: String? = nil,
         note: String? = nil,
         challenge: String? = nil,
@@ -45,6 +49,7 @@ final class StoredRetelling {
         self.groupID = groupID
         self.attempt = attempt
         self.isBenchmark = isBenchmark
+        self.storyTitle = storyTitle
         self.focus = focus
         self.note = note
         self.challenge = challenge

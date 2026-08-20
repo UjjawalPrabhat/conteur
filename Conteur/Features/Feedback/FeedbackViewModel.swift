@@ -16,14 +16,38 @@ final class FeedbackViewModel {
     var feedback: Feedback? { assessment.feedback }
 
     /// Moments in the retelling the feedback is about — these can be pointed at.
-    var located: [Evidence] {
-        (feedback?.evidence ?? []).filter(\.isLocated)
-    }
+    var located: [Detail] { details.filter(\.evidence.isLocated) }
 
     /// Things the story had that the retelling did not. There is no moment to point at,
     /// so these are shown as absences rather than as places.
-    var absences: [Evidence] {
-        (feedback?.evidence ?? []).filter { !$0.isLocated }
+    var absences: [Detail] { details.filter { !$0.evidence.isLocated } }
+
+    /// Each piece of evidence beside the finding that produced it.
+    ///
+    /// The composed feedback carries evidence alone, which is all the spoken note needs. The
+    /// screen needs more: what kind of claim this is, and the measured sentence behind it.
+    /// Both are on the finding, so the finding is looked back up rather than copied into
+    /// `Feedback` where the composer could then be tempted to edit it.
+    private var details: [Detail] {
+        let findings = assessment.diagnosis.assessments.flatMap(\.findings)
+        return (feedback?.evidence ?? []).enumerated().map { index, evidence in
+            let source = findings.first { $0.evidence.contains(evidence) }
+            return Detail(
+                id: index,
+                evidence: evidence,
+                dimension: source?.dimension ?? feedback?.dimension ?? .structure,
+                observation: source?.observation
+            )
+        }
+    }
+
+    struct Detail: Identifiable {
+        let id: Int
+        let evidence: Evidence
+        /// Shown as the card's category, so a reader can tell a delivery measurement from a
+        /// fidelity one without reading the sentence first.
+        let dimension: Dimension
+        let observation: String?
     }
 
     var bands: [DimensionAssessment] {

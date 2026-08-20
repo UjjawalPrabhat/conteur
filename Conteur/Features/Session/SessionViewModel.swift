@@ -45,6 +45,27 @@ final class SessionViewModel {
     /// because the first thing worth knowing is whether the words arrived at all.
     var heard: String { transcript.text }
 
+    /// The transcript split where the last clause ended: what has settled, and the phrase
+    /// being spoken now. The telling screen dims the first and lights the second, so the
+    /// words being said carry and the ones already said recede.
+    var settled: String {
+        String(transcript.words.prefix(upTo: phraseStart).map(\.text).joined(separator: " "))
+    }
+
+    var phrase: String {
+        transcript.words[phraseStart...].map(\.text).joined(separator: " ")
+    }
+
+    private var phraseStart: Int {
+        guard let last = transcript.words.lastIndex(where: \.endsClause) else { return 0 }
+        return min(last + 1, transcript.words.count)
+    }
+
+    /// What a telling amounted to, for the screen that has to explain why it was too short
+    /// without scoring it.
+    var spokenWords: Int { transcript.words.count }
+    var spokenDuration: TimeInterval { transcript.duration }
+
     var remaining: TimeInterval { max(0, Self.maximumDuration - elapsed) }
     var isRunningOut: Bool { phase == .listening && remaining <= Self.warningDuration }
 

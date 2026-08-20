@@ -29,6 +29,7 @@ struct SwiftDataRetellingStore: RetellingStore {
             groupID: group,
             attempt: attempt,
             isBenchmark: isBenchmark,
+            storyTitle: assessment.comparison.story.title,
             focus: assessment.focus?.rawValue,
             note: assessment.feedback?.note,
             challenge: assessment.feedback?.challenge,

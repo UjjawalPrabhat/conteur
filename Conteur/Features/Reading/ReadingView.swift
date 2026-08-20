@@ -10,71 +10,91 @@ struct ReadingView: View {
     let onBack: () -> Void
     let onFinished: () -> Void
 
-    @State private var hasReachedEnd = false
-
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                Text(story.prose)
-                    .font(.system(.body, design: .serif))
-                    .lineSpacing(7)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                // Marking the end of the text rather than the end of the scroll view, so
-                // the button appears when the story has been read, not when it is on screen.
-                Color.clear
-                    .frame(height: 1)
-                    .onAppear { hasReachedEnd = true }
-
-                closing
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.xl) {
+                    header
+                    Callout(text: "Read it once. It won't be here afterwards.")
+                    prose
+                }
+                .screenPadding()
+                .padding(.top, Space.l)
+                // Room for the scrim and the button, so the last paragraph is never
+                // trapped underneath them.
+                .padding(.bottom, 150)
             }
-            .padding(24)
-            // Clears the floating tab bar, which otherwise sits over the last lines.
-            .safeAreaPadding(.bottom, 60)
+            .scrollIndicators(.hidden)
+
+            closing
         }
-        // No navigation title: the story's own heading is directly below it, and two
-        // copies of the same words read as a mistake.
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Stories", systemImage: "chevron.left", action: onBack)
+        .background(NightBackground())
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top) {
+            HStack {
+                BackButton(title: "Stories", action: onBack)
+                Spacer()
             }
+            .screenPadding()
+            .padding(.bottom, Space.s)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Space.sm) {
             Text(story.title)
-                .font(.largeTitle.weight(.semibold))
-            HStack(spacing: 10) {
-                Text(story.genre.label)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(.tint.opacity(0.12), in: .capsule)
-                Text("about \(Int(story.readingTime.rounded())) seconds to read")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .textStyle(.storyTitle)
+                .foregroundStyle(Ink.primary)
+            Text("\(story.genre.label) · about \(Int(story.readingTime.rounded())) seconds to read")
+                .textStyle(.meta)
+                .foregroundStyle(Ink.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var prose: some View {
+        VStack(alignment: .leading, spacing: Space.l) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                Text(paragraph)
+                    .textStyle(.storyBody)
+                    .foregroundStyle(Ink.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Read it once. It won't be here afterwards.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
     }
 
-    @ViewBuilder
+    private var paragraphs: [String] {
+        story.prose
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// The button is always available. Gating it on having scrolled to the end measured
+    /// whether the text had been on screen, not whether it had been read, and left anybody
+    /// who skims stuck on a screen with no way forward.
     private var closing: some View {
-        if hasReachedEnd {
-            VStack(alignment: .leading, spacing: 12) {
-                Divider()
-                Text("Ready to tell it back?")
-                    .font(.headline)
-                Button("I've read it", action: onFinished)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-            }
-            .transition(.opacity)
+        VStack(spacing: Space.m) {
+            Text("Ready to tell it back?")
+                .textStyle(.secondary)
+                .foregroundStyle(Ink.secondary)
+            Button("I've read it", action: onFinished)
+                .buttonStyle(EmberButtonStyle())
+        }
+        .screenPadding()
+        .padding(.bottom, Space.s)
+        .padding(.top, Space.section)
+        .background {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: Color.nightDeep.opacity(0.94), location: 0.34),
+                    .init(color: Color.nightDeep.opacity(0.94), location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
         }
     }
 }
