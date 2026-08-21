@@ -15,6 +15,38 @@ final class FeedbackViewModel {
 
     var feedback: Feedback? { assessment.feedback }
 
+    var note: String {
+        feedback?.note ?? "There wasn't enough in that one for me to say much about how you told it."
+    }
+
+    var challenge: String {
+        feedback?.challenge ?? "Tell it again, and give it a bit more room this time."
+    }
+
+    /// The line under the title: which story, whether this was a retell, and what it came to.
+    var subtitle: String {
+        let transcript = assessment.timeline.transcript
+        var parts = [assessment.comparison.story.title]
+        if assessment.progress != nil { parts.append("second telling") }
+        parts.append("\(transcript.words.count) words")
+        parts.append(transcript.duration.secondsLabel)
+        return parts.joined(separator: " · ")
+    }
+
+    var spokenDuration: String {
+        assessment.timeline.transcript.duration.timestampLabel
+    }
+
+    /// How many dimensions held, on the closed row.
+    ///
+    /// The design's "2 changed" would need the previous telling's six bands, and only the
+    /// focus dimension's before-and-after is carried through. Counting what is Strong now is
+    /// the honest version of the same glance.
+    var strongLabel: String {
+        let strong = bands.count { $0.band == .strong }
+        return strong == 0 ? "none Strong" : "\(strong) Strong"
+    }
+
     /// Moments in the retelling the feedback is about — these can be pointed at.
     var located: [Detail] { details.filter(\.evidence.isLocated) }
 

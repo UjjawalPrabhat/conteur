@@ -46,6 +46,15 @@ struct SwiftDataRetellingStore {
         return Baseline(scores: scores)
     }
 
+    /// Where the fire stands across all of history. Read either side of a save so a telling
+    /// can be told it was the one that earned a level.
+    func fireStanding() -> FireStanding {
+        let descriptor = FetchDescriptor<StoredRetelling>(
+            sortBy: [SortDescriptor(\.recordedAt, order: .reverse)]
+        )
+        return FireLevel.standing(over: (try? context.fetch(descriptor)) ?? [])
+    }
+
     func lastBand(for dimension: Dimension) -> Band? {
         recent(limit: 1).first?.scores[dimension].map(Band.init(score:))
     }

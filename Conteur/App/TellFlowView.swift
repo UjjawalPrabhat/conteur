@@ -26,6 +26,8 @@ struct TellFlowView: View {
     @State private var previous: Assessment?
     @State private var current: Assessment?
     @State private var isTelling = false
+    /// Set only when this telling was the one that moved the fire up a level.
+    @State private var earnedLevel: FireLevel?
 
     var body: some View {
         NavigationStack {
@@ -67,6 +69,7 @@ struct TellFlowView: View {
             if let current {
                 FeedbackView(
                     assessment: current,
+                    earnedLevel: earnedLevel,
                     onRetell: { retell() },
                     onDone: { restart() }
                 )
@@ -80,13 +83,19 @@ struct TellFlowView: View {
         return SessionView(
             story: story,
             challenge: previous?.feedback?.challenge,
+            attempt: attempt,
             baseline: store.baseline(),
             history: previous?.focus.flatMap { store.lastBand(for: $0) },
             previous: previous?.diagnosis,
             isTelling: $isTelling,
             onAbandon: { restart() }
         ) { assessment in
+            // Read either side of the save: a level is earned by the telling that crossed it,
+            // and saying so afterwards is the only moment it is true.
+            let before = store.fireStanding().level
             try? store.save(assessment, attempt: attempt, group: group, isBenchmark: false)
+            let after = store.fireStanding().level
+            earnedLevel = after > before ? after : nil
             current = assessment
             stage = .feedback
         }
@@ -98,6 +107,7 @@ struct TellFlowView: View {
     /// The same story, told again against the challenge. The story is not shown a second
     /// time — the point is what they retained and how they told it, not re-reading.
     private func retell() {
+        earnedLevel = nil
         previous = current
         current = nil
         attempt += 1
@@ -106,6 +116,7 @@ struct TellFlowView: View {
     }
 
     private func restart() {
+        earnedLevel = nil
         previous = nil
         current = nil
         story = nil

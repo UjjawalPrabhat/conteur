@@ -70,16 +70,20 @@ struct ReadingView: View {
             .filter { !$0.isEmpty }
     }
 
-    /// The button is always available. Gating it on having scrolled to the end measured
-    /// whether the text had been on screen, not whether it had been read, and left anybody
-    /// who skims stuck on a screen with no way forward.
+    /// Always available. Gating it on having scrolled to the end measured whether the text
+    /// had been on screen, not whether it had been read, and left anybody who skims stuck on
+    /// a screen with no way forward.
     private var closing: some View {
         VStack(spacing: Space.m) {
-            Text("Ready to tell it back?")
+            Text("That's the whole story. It won't be here once you begin.")
                 .textStyle(.secondary)
                 .foregroundStyle(Ink.secondary)
-            Button("I've read it", action: onFinished)
-                .buttonStyle(EmberButtonStyle())
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            IgniteControl(onIgnite: onFinished)
+            Text("press and hold")
+                .textStyle(.categoryLabel)
+                .foregroundStyle(Ink.quaternary)
         }
         .screenPadding()
         .padding(.bottom, Space.s)

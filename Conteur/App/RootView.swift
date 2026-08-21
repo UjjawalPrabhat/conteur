@@ -9,10 +9,8 @@ struct RootView: View {
             Tab("Retellings", systemImage: "arrow.counterclockwise") {
                 HistoryView()
             }
-            // On the experiment branch only: the model cannot be observed from the
-            // simulator, so the measurement has to be reachable on the device.
-            Tab("Model", systemImage: "chart.bar") {
-                ModelEvaluationView()
+            Tab("Progress", systemImage: "chart.bar") {
+                ProgressCoachView()
             }
         }
         .tint(Color.ember)

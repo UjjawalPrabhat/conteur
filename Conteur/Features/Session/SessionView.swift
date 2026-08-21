@@ -4,6 +4,8 @@ import SwiftUI
 struct SessionView: View {
     let story: GuidedStory
     let challenge: String?
+    /// Which attempt this is, so a telling too short to judge can still say where it sat.
+    let attempt: Int
     let baseline: Baseline
     let history: Band?
     let previous: Diagnosis?
@@ -16,6 +18,7 @@ struct SessionView: View {
     init(
         story: GuidedStory,
         challenge: String?,
+        attempt: Int,
         baseline: Baseline,
         history: Band?,
         previous: Diagnosis?,
@@ -25,6 +28,7 @@ struct SessionView: View {
     ) {
         self.story = story
         self.challenge = challenge
+        self.attempt = attempt
         self.baseline = baseline
         self.history = history
         self.previous = previous
@@ -208,19 +212,41 @@ struct SessionView: View {
         VStack(spacing: Space.xl) {
             Spacer()
             DimmedEmber()
-            Text(invitation)
-                .textStyle(.statement)
-                .foregroundStyle(Ink.primary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Space.xxl)
-            Text(explanation)
-                .textStyle(.body)
-                .foregroundStyle(Ink.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Space.xxl)
+
+            VStack(spacing: Space.m) {
+                Text(tally)
+                    .textStyle(.meta)
+                    .foregroundStyle(Ink.tertiary)
+                Text(invitation)
+                    .textStyle(.statement)
+                    .foregroundStyle(Ink.primary)
+                    .multilineTextAlignment(.center)
+                Text(explanation)
+                    .textStyle(.body)
+                    .foregroundStyle(Ink.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, Space.xxl)
+
+            // The challenge is not spent by a telling too short to judge, so it is still the
+            // thing to do — saying so is what stops this screen reading as a dead end.
+            if let challenge {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Text("Still standing").eyebrowStyle(.eyebrowSmall)
+                    Text(challenge)
+                        .textStyle(.body)
+                        .foregroundStyle(Ink.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Space.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .cardSurface(Surface.absence)
+                .screenPadding()
+            }
+
             Spacer()
             VStack(spacing: Space.m) {
-                Button("Start again") { model.begin() }
+                Button("Tell it again") { model.begin() }
                     .buttonStyle(EmberButtonStyle())
                 Button("Back to stories") {
                     Task {
@@ -235,11 +261,16 @@ struct SessionView: View {
         }
     }
 
+    /// What the telling amounted to, stated before the sentence about it, so the number is
+    /// context rather than an accusation.
+    private var tally: String {
+        "\(model.spokenWords) words · \(model.spokenDuration.timestampLabel) · attempt \(attempt)"
+    }
+
     private var explanation: String {
         switch model.phase {
         case .tooShort:
-            "\(model.spokenWords) words in \(Int(model.spokenDuration.rounded())) seconds. "
-            + "Nothing is scored — a short telling isn't a weak one, there's just nothing to point at."
+            "Nothing is scored. A short telling isn't a weak one — there's just nothing to point at."
         case .unmatched:
             "Nothing is scored. What you said didn't line up with the story, so there is nothing to measure it against."
         default:

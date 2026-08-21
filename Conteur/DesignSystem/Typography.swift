@@ -69,6 +69,10 @@ extension TextRole {
     static let eyebrowSmall = TextRole(.default, 11, weight: .semibold, tracking: 0.14, scaling: .caption2)
     static let pillLabel = TextRole(.default, 12, weight: .medium, scaling: .caption)
 
+    /// The big totals on the numbers screen. Serif, because they are the app talking about
+    /// you rather than a readout.
+    static let figure = TextRole(.serif, 30, tracking: -0.015, scaling: .title)
+
     // Anything the user should be able to compare down a column.
     static let timestamp = TextRole(.monospaced, 12, weight: .semibold, tracking: 0.02, scaling: .caption)
     static let stats = TextRole(.monospaced, 12, weight: .medium, tracking: 0.02, scaling: .caption)
