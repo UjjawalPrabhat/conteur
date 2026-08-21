@@ -20,10 +20,12 @@ struct SwiftDataRetellingStore {
             attempt: attempt,
             isBenchmark: isBenchmark,
             storyTitle: assessment.comparison.story.title,
+            storyID: assessment.comparison.story.id,
             focus: assessment.focus?.rawValue,
             note: assessment.feedback?.note,
             challenge: assessment.feedback?.challenge,
             scoreData: try? JSONEncoder().encode(assessment.scores),
+            findingData: try? JSONEncoder().encode(assessment.findingSubjects),
             transcriptText: assessment.timeline.transcript.text,
             wordCount: assessment.timeline.delivery.wordCount,
             duration: assessment.timeline.duration

@@ -15,9 +15,10 @@ extension Color {
     }
 
     // Night — the standard screen behind everything that is not the fire.
-    static let nightTop = Color(hex: 0x0D1E36)
-    static let nightMid = Color(hex: 0x081324)
-    static let nightDeep = Color(hex: 0x050D1A)
+    static let nightTop = Color(hex: 0x040A16)
+    static let nightHigh = Color(hex: 0x071020)
+    static let nightMid = Color(hex: 0x08111C)
+    static let nightDeep = Color(hex: 0x0A121C)
 
     // The fire scene.
     static let sceneSkyTop = Color(hex: 0x040A16)
@@ -46,6 +47,11 @@ extension Color {
     static let paper = Color(hex: 0xF4EFE7)
     /// The label on a primary button, which sits on ember and has to be near-black.
     static let onEmber = Color(hex: 0x160D03)
+
+    /// Every number, delta and chart. Data is deliberately not ember: the accent stays
+    /// reserved for what the user can act on and for the fire itself, so a screen full of
+    /// figures cannot read as a screen full of buttons.
+    static let moonlight = Color(hex: 0x8FB4CE)
 }
 
 /// Text strengths on dark.

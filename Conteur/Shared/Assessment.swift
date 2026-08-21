@@ -19,4 +19,11 @@ struct Assessment: Sendable {
             partial[assessment.dimension] = assessment.score
         }
     }
+
+    /// What went wrong, by subject rather than by sentence. Kept so history can say which
+    /// failure keeps recurring — the observations are phrased for one telling and read
+    /// oddly in aggregate, where the subject is stable.
+    var findingSubjects: [String] {
+        diagnosis.assessments.flatMap(\.findings).map(\.subject)
+    }
 }

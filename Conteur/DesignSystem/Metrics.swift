@@ -64,7 +64,12 @@ extension View {
 struct NightBackground: View {
     var body: some View {
         LinearGradient(
-            colors: [.nightTop, .nightMid, .nightDeep],
+            stops: [
+                .init(color: .nightTop, location: 0),
+                .init(color: .nightHigh, location: 0.38),
+                .init(color: .nightMid, location: 0.68),
+                .init(color: .nightDeep, location: 1),
+            ],
             startPoint: .top,
             endPoint: .bottom
         )
