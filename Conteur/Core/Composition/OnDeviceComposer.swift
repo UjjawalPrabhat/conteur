@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import os.log
 
 /// Turns a finding into something worth hearing.
 ///
@@ -7,27 +8,55 @@ import FoundationModels
 /// and it is the reason a 3B on-device model is sufficient here.
 struct OnDeviceComposer: FeedbackComposing {
     private static let options = GenerationOptions(sampling: .greedy)
+    private static let maxBriefTokens = 1300
+    private static let logger = Logger(subsystem: "com.daffa.conteur", category: "composer.tokens")
 
-    func compose(from diagnosis: Diagnosis, history: Band?, progress: RetellingProgress?) async -> Feedback? {
+    func compose(
+        from diagnosis: Diagnosis,
+        context: TargetedContext?,
+        history: Band?,
+        progress: RetellingProgress?
+    ) async -> Feedback? {
         // Nothing could be judged at all — the caller says so rather than inventing one.
         guard diagnosis.isJudgeable else { return nil }
 
         // Nothing was wrong. Saying nothing would leave the speaker with a blank screen
         // and no way back into the loop, so this still earns a note and a challenge.
         guard let focus = diagnosis.focus, !focus.findings.isEmpty else {
-            return TemplateComposer().nothingStoodOut(in: diagnosis, progress: progress)
+            let fallback = TemplateComposer().nothingStoodOut(in: diagnosis, progress: progress)
+            Self.logTokenUsage(for: fallback, promptTokens: 0)
+            return fallback
         }
 
         let fallback = TemplateComposer().compose(focus, progress: progress)
-        guard case .available = SystemLanguageModel.default.availability else { return fallback }
+        guard case .available = SystemLanguageModel.default.availability else {
+            Self.logTokenUsage(for: fallback, promptTokens: 0)
+            return fallback
+        }
 
         do {
-            let session = LanguageModelSession(instructions: Self.instructions)
-            let draft = try await session.respond(
-                to: Self.brief(for: focus, history: history, progress: progress),
+            let instructions = Self.instructions
+            let brief = Self.brief(for: focus, context: context, history: history, progress: progress)
+            let session = LanguageModelSession(instructions: instructions)
+            let response = try await session.respond(
+                to: brief,
                 generating: NoteDraft.self,
                 options: Self.options
-            ).content
+            )
+            let draft = response.content
+
+            let promptTokens = Self.tokenCount(for: instructions) + Self.tokenCount(for: brief)
+            let outputTokens = Self.tokenCount(for: draft.note) + Self.tokenCount(for: draft.challenge)
+            Self.logTokenUsage(
+                for: Feedback(
+                    dimension: focus.dimension,
+                    note: draft.note,
+                    challenge: draft.challenge,
+                    evidence: focus.findings.flatMap(\.evidence)
+                ),
+                promptTokens: promptTokens,
+                outputTokens: outputTokens
+            )
 
             return Feedback(
                 dimension: focus.dimension,
@@ -36,33 +65,124 @@ struct OnDeviceComposer: FeedbackComposing {
                 evidence: focus.findings.flatMap(\.evidence)
             )
         } catch {
+            Self.logTokenUsage(for: fallback, promptTokens: 0)
             return fallback
         }
     }
 
     private static func brief(
         for focus: DimensionAssessment,
+        context: TargetedContext?,
         history: Band?,
         progress: RetellingProgress?
     ) -> String {
         var lines: [String] = []
 
-        // On a second telling the comparison leads, because that is what they were
-        // asked to change and what they are waiting to hear about.
-        if let progress {
-            lines.append("They were asked: \(progress.challenge)")
-            lines.append("Verdict: \(progress.verdict.rawValue)")
-            lines.append(contentsOf: progress.resolved.map { "- fixed: \($0.observation)" })
-            lines.append(contentsOf: progress.persisted.map { "- still there: \($0.observation)" })
-            lines.append(contentsOf: progress.introduced.map { "- new this time: \($0.observation)" })
+        if let context {
+            let tokenBudget = Self.maxBriefTokens - Self.tokenCount(for: Self.instructions)
+            let cappedLines = Self.cappedLines(from: Self.contextLines(for: context, progress: progress), within: tokenBudget)
+            lines.append(contentsOf: cappedLines)
         }
 
-        lines.append("What they did: \(focus.dimension.rawValue)")
-        lines.append(contentsOf: focus.findings.map { "- \($0.observation)" })
-        if let history, progress == nil {
-            lines.append("Last time this was \(history.rawValue).")
+        if let progress, progress.before != progress.after {
+            lines.append("Previous progress:")
+            lines.append("  Covered: \(progress.before.label) → \(progress.after.label)")
+            lines.append("")
         }
+
+        lines.append("Current findings:")
+        lines.append("  Dimension: \(focus.dimension.rawValue)")
+        lines.append("  Band: \(focus.band.rawValue)")
+        lines.append("  Score: \(focus.score)")
+        lines.append("")
+        for finding in focus.findings {
+            lines.append("  - \(finding.observation)")
+        }
+        lines.append("")
+
+        if let history {
+            lines.append("Previous telling:")
+            lines.append("  Band: \(history.rawValue)")
+            lines.append("")
+        }
+
         return lines.joined(separator: "\n")
+    }
+
+    private static func contextLines(for context: TargetedContext, progress: RetellingProgress?) -> [String] {
+        var lines: [String] = []
+
+        lines.append("Book: \(context.bookTitle)")
+        lines.append("Mode: \(context.evaluationMode.rawValue)")
+        lines.append("")
+
+        if let progress, progress.before != progress.after {
+            lines.append("Previous progress:")
+            lines.append("  Covered: \(progress.before.label) → \(progress.after.label)")
+            lines.append("")
+        }
+
+        if !context.entityEvents.isEmpty {
+            lines.append("Relevant entity history:")
+            for event in context.entityEvents.prefix(10) {
+                lines.append("  - \(event.description)")
+            }
+            lines.append("")
+        }
+
+        if let stakesEvent = context.stakesEvent {
+            lines.append("Stakes event:")
+            lines.append("  - \(stakesEvent.description)")
+            lines.append("")
+        }
+
+        if !context.emotionalHistory.isEmpty {
+            lines.append("Recent emotional pattern:")
+            for event in context.emotionalHistory.prefix(6) {
+                lines.append("  - \(event.description)")
+            }
+            lines.append("")
+        }
+
+        return lines
+    }
+
+    private static func cappedLines(from lines: [String], within remainingBudget: Int) -> [String] {
+        var budget = remainingBudget
+        var capped: [String] = []
+
+        for line in lines {
+            let cost = Self.tokenCount(for: line) + 1
+            guard cost > 0 && cost <= budget else { break }
+            capped.append(line)
+            budget -= cost
+        }
+
+        return capped
+    }
+
+    private static func tokenCount(for text: String) -> Int {
+        max(text.splitByWhitespaceAndPunctuation().count, 1)
+    }
+
+    private static func logTokenUsage(
+        for feedback: Feedback,
+        promptTokens: Int,
+        outputTokens: Int? = nil
+    ) {
+        let noteTokens = Self.tokenCount(for: feedback.note)
+        let challengeTokens = Self.tokenCount(for: feedback.challenge)
+        let resolvedOutput = outputTokens ?? noteTokens + challengeTokens
+
+        logger.debug(
+            "feedback_token_usage dimension=\(feedback.dimension.rawValue) prompt_tokens=\(promptTokens) output_tokens=\(resolvedOutput) note_tokens=\(noteTokens) challenge_tokens=\(challengeTokens)"
+        )
+    }
+
+    private static func logTokenUsage(promptTokens: Int, outputTokens: Int) {
+        logger.debug(
+            "feedback_token_usage prompt_tokens=\(promptTokens) output_tokens=\(outputTokens)"
+        )
     }
 
     private static let instructions = """
@@ -86,15 +206,6 @@ struct OnDeviceComposer: FeedbackComposing {
         """
 }
 
-@Generable
-private struct NoteDraft {
-    @Guide(description: "Three or four sentences, spoken directly to the storyteller.")
-    var note: String
-
-    @Guide(description: "One sentence: what to do differently next time.")
-    var challenge: String
-}
-
 /// Used when the model is unavailable or declines. Blunter than the composed version,
 /// but every claim in it is still true and still traceable.
 private struct TemplateComposer {
@@ -110,8 +221,6 @@ private struct TemplateComposer {
         )
     }
 
-    /// Deliberately templated rather than generated. Handed a brief with no findings in
-    /// it, the model's obvious move is to invent one.
     func nothingStoodOut(in diagnosis: Diagnosis, progress: RetellingProgress?) -> Feedback {
         let held = diagnosis.strengths.first?.dimension
         let opening = progress.map { "\($0.verdict.label). " } ?? ""
@@ -120,8 +229,8 @@ private struct TemplateComposer {
 
         return Feedback(
             dimension: held ?? .structure,
-            note: opening + praise + " So the useful thing now is to make it harder for yourself.",
-            challenge: "Tell it again in half the time, and keep everything that matters.",
+            note: "\(opening)\(praise)",
+            challenge: challenge(for: held ?? .structure),
             evidence: []
         )
     }
@@ -134,5 +243,11 @@ private struct TemplateComposer {
         case .engagement: "Tell it again, and say out loud why each turn mattered."
         case .delivery: "Tell it again, and let the silences do some of the work."
         }
+    }
+}
+
+private extension String {
+    func splitByWhitespaceAndPunctuation() -> [Substring] {
+        self.split { $0.isWhitespace || $0.isPunctuation }
     }
 }

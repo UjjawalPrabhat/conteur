@@ -8,17 +8,21 @@ struct Assessment: Sendable {
     let narrative: NarrativeReading
     let diagnosis: Diagnosis
     let feedback: Feedback?
-    /// Present only on a second telling.
     let progress: RetellingProgress?
-    /// Continuity state threaded through to the next session.
     let readingProgress: ReadingProgress
+    let bookID: UUID?
+    var mode: ChallengeMode? = nil
 
     var focus: Dimension? { diagnosis.focus?.dimension }
 
-    /// Contributes this retelling's scores to a speaker's rolling baseline.
     var scores: [Dimension: Double] {
         diagnosis.assessments.reduce(into: [:]) { partial, assessment in
             partial[assessment.dimension] = assessment.score
         }
     }
 }
+
+// MARK: - Comparison types
+
+// Comparison types are intentionally defined alongside their logic in
+// `RetellingComparison.swift` so the retry mechanics stay together.

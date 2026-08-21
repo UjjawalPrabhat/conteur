@@ -46,7 +46,8 @@ struct OnDeviceNarrativeAnalyzer: NarrativeAnalyzing {
             entitiesIntroduced: draft.entitiesIntroduced.normalizedEntities,
             entitiesReferenced: draft.entitiesReferenced.normalizedEntities,
             statesStakes: draft.statesStakes,
-            connectsCausally: draft.connectsCausally
+            connectsCausally: draft.connectsCausally,
+            expectedEmotion: draft.expectedEmotion
         )
     }
 
@@ -116,9 +117,19 @@ struct OnDeviceNarrativeAnalyzer: NarrativeAnalyzing {
         or describes the entity for the first time. Only mark something as introduced
         when this stretch clearly presents it as new information.
 
+        For each entity mentioned in this chunk, indicate whether it is:
+        - new: this is the first appearance in the entire retelling
+        - carried: already appeared earlier, just referenced here
+        - ambiguous: unclear whether new or carried
+
+        Only mark as new if the chunk introduces the entity with description or definition.
+
         Stakes means the stretch says what is at risk or why an event matters.
         Causal means events are joined by cause rather than just sequence: "because",
         "which meant", "so" — not "and then".
+
+        The primary emotion this stretch of storytelling should convey.
+        Choose: joy, sadness, anger, fear, surprise, tension, relief, neutral, mixed.
         """
 
     private static let arcInstructions = """
@@ -157,6 +168,9 @@ private struct BeatDraft {
 
     @Guide(description: "True if events here are joined by cause rather than just sequence.")
     var connectsCausally: Bool
+
+    @Guide(description: "The primary emotion this stretch should convey. Choose: joy, sadness, anger, fear, surprise, tension, relief, neutral, mixed.")
+    var expectedEmotion: String?
 }
 
 @Generable
@@ -204,6 +218,37 @@ private enum StoryComponentDraft {
     case attempts
     case consequences
     case resolution
+}
+
+// MARK: - Grounding reconciliation
+
+/// Reconciles the model's explicit `entityGrounding` with intra-session tracking.
+/// `carried` and `ambiguous` entities are moved to referenced; `new` ones stay introduced.
+extension [Beat] {
+    func reconcileEntityGrounding(_ groundings: [EntityGrounding]) -> [Beat] {
+        let groundingMap = Dictionary(groundings.map { ($0.entity.lowercased(), $0.status) }, uniquingKeysWith: { first, _ in first })
+        return map { beat in
+            let introduced = beat.entitiesIntroduced.filter { entity in
+                let status = groundingMap[entity] ?? .new
+                return status == .new
+            }
+            let referenced = beat.entitiesReferenced + beat.entitiesIntroduced.filter { entity in
+                let status = groundingMap[entity] ?? .new
+                return status != .new
+            }
+            return Beat(
+                start: beat.start,
+                end: beat.end,
+                summary: beat.summary,
+                kind: beat.kind,
+                entitiesIntroduced: introduced,
+                entitiesReferenced: referenced,
+                statesStakes: beat.statesStakes,
+                connectsCausally: beat.connectsCausally,
+                expectedEmotion: beat.expectedEmotion
+            )
+        }
+    }
 }
 
 private extension SpanKind {

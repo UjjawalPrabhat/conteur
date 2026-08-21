@@ -150,7 +150,8 @@ private struct FakeNarrativeAnalyzer {
             entitiesIntroduced: shape == .withDroppedThread && index == 0 ? ["brother"] : [],
             entitiesReferenced: index > 0 ? ["protagonist"] : [],
             statesStakes: shape != .withDroppedThread,
-            connectsCausally: shape != .withDroppedThread
+            connectsCausally: shape != .withDroppedThread,
+            expectedEmotion: nil
         )
     }
 

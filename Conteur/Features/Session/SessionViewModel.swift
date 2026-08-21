@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Observation
+import SwiftData
 
 @MainActor
 @Observable
@@ -58,7 +59,11 @@ final class SessionViewModel {
     private let reader = ExpressionReader()
     private var neutral = ExpressionBaseline()
     private let chunker = TranscriptChunker()
-
+    private let eventEngine = EventEngine()
+    private let emotionEngine = EmotionalEngine()
+    private var bookContext: BookContext?
+    private let modelContext: ModelContext?
+    private(set) var book: BookSession?
     private var baseline: Baseline = .none
     private var history: Band?
     /// The first telling, when this is the retell against a challenge.
@@ -80,13 +85,17 @@ final class SessionViewModel {
         narrative: any NarrativeAnalyzing = OnDeviceNarrativeAnalyzer(),
         diagnosing: any Diagnosing = RuleBasedDiagnosis(),
         composing: any FeedbackComposing = OnDeviceComposer(),
-        speech: any Speaking = SystemSpeech()
+        speech: any Speaking = SystemSpeech(),
+        bookContext: BookContext? = nil,
+        modelContext: ModelContext? = nil
     ) {
         self.transcriber = transcriber
         self.narrative = narrative
         self.diagnosing = diagnosing
         self.composing = composing
         self.speech = speech
+        self.bookContext = bookContext
+        self.modelContext = modelContext
     }
 
     var isListening: Bool { phase == .listening }
@@ -96,19 +105,24 @@ final class SessionViewModel {
         history: Band?,
         previous: Diagnosis?,
         challenge: String?,
-        readingProgress: ReadingProgress
+        readingProgress: ReadingProgress,
+        book: BookSession? = nil,
+        bookContext: BookContext? = nil
     ) {
         self.baseline = baseline
         self.history = history
         self.previous = previous
         self.challenge = challenge
         self.readingProgress = readingProgress
+        self.book = book
+        self.bookContext = bookContext
     }
 
     func begin() {
         guard session == nil else { return }
         phase = .preparing
         reset()
+        PerformanceProbe.startSession()
 
         session = Task {
             do {
@@ -131,6 +145,7 @@ final class SessionViewModel {
 
                 try await respond()
             } catch {
+                ErrorReporter.record(error)
                 phase = .failed(error.localizedDescription)
             }
             session = nil
@@ -202,7 +217,8 @@ final class SessionViewModel {
         elapsed = time
 
         if time >= Self.maximumDuration, phase == .listening {
-            endCapture()
+            Task { await end() }
+            return
         }
 
         guard loudness < Self.quietLevel else {
@@ -278,14 +294,62 @@ final class SessionViewModel {
             from: narrativeReading,
             previous: readingProgress
         )
+
+        let sessionNumber = readingProgress.previousSessions + 1
+        var sessionStart: TimeInterval = 0
+        var foundFirst = false
+        for word in transcript.words where !foundFirst {
+            sessionStart = word.start
+            foundFirst = true
+        }
+        let sessionBook = book ?? BookSession(title: "<pending book selection>")
+        let generatedEvents = eventEngine.events(
+            from: SessionSnapshot(
+                number: sessionNumber,
+                startTime: sessionStart,
+                mode: challenge != nil ? .continuation : .standalone,
+                beats: resolvedBeats,
+                arc: narrativeReading.arc,
+                emotionEvents: [],
+                emotionMap: [:]
+            ),
+            in: sessionBook
+        )
+        let emotionMatches = emotionEngine.evaluate(
+            beats: resolvedBeats,
+            expressions: expressions
+        )
+        let emotionEvents = emotionEngine.produceEvents(
+            from: emotionMatches,
+            session: sessionNumber
+        )
+        let allEvents = generatedEvents + emotionEvents
+
+        let targetedContext = eventEngine.targetedContext(
+            for: SessionSnapshot(
+                number: sessionNumber,
+                startTime: sessionStart,
+                mode: challenge != nil ? .continuation : .standalone,
+                beats: resolvedBeats,
+                arc: narrativeReading.arc,
+                emotionEvents: emotionMatches,
+                emotionMap: [:]            ),
+            in: sessionBook
+        )
+
         let progress = previous.flatMap { first in
             challenge.flatMap { comparison.compare(first, with: diagnosis, challenge: $0) }
         }
         let feedback = await composing.compose(
             from: diagnosis,
+            context: targetedContext,
             history: history,
             progress: progress
         )
+
+        let sessionBookID = sessionBook.bookID
+        try? self.bookContext?.append(events: allEvents, to: sessionBook)
+        try? self.bookContext?.update(registry: sessionBook.entityRegistry, in: sessionBook)
 
         assessment = Assessment(
             recordedAt: .now,
@@ -294,7 +358,9 @@ final class SessionViewModel {
             diagnosis: diagnosis,
             feedback: feedback,
             progress: progress,
-            readingProgress: nextProgress
+            readingProgress: nextProgress,
+            bookID: sessionBookID,
+            mode: challenge != nil ? .continuation : .standalone
         )
 
         phase = .responding

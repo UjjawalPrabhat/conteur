@@ -2,15 +2,20 @@ import SwiftUI
 
 struct FeedbackView: View {
     @State private var model: FeedbackViewModel
+    private let assessment: Assessment
+    private let hasPrevious: Bool
     private let onRetell: () -> Void
     private let onDone: () -> Void
 
     init(
         assessment: Assessment,
+        hasPrevious: Bool = false,
         onRetell: @escaping () -> Void,
         onDone: @escaping () -> Void
     ) {
         _model = State(initialValue: FeedbackViewModel(assessment: assessment))
+        self.assessment = assessment
+        self.hasPrevious = hasPrevious
         self.onRetell = onRetell
         self.onDone = onDone
     }
@@ -21,6 +26,7 @@ struct FeedbackView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
                         readingProgress
+                        modeHeader
                         whatChanged
                         note
                         allFindings
@@ -123,6 +129,20 @@ struct FeedbackView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: - Mode header
+
+    private var modeHeader: some View {
+        if assessment.mode == .standalone {
+            return AnyView(
+                Text("Standalone")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            )
+        }
+
+        return AnyView(EmptyView())
     }
 
     // MARK: - Composed note
@@ -329,15 +349,18 @@ struct FeedbackView: View {
     // MARK: - Challenge
 
     private var challenge: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Try again")
+        let canRetry = hasPrevious || assessment.progress != nil
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(canRetry ? "Try again" : "Next time")
                 .font(.headline)
             Text(model.feedback?.challenge ?? "Tell it again, and give it a bit more room this time.")
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button("Tell it again", action: onRetell)
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
+            if canRetry {
+                Button("Tell it again", action: onRetell)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 4)
+            }
         }
         .padding()
         .background(.tint.opacity(0.08), in: .rect(cornerRadius: 12))

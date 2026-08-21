@@ -8,7 +8,9 @@ struct ConteurApp: App {
     /// passing `cloudKitDatabase: .automatic` here.
     private let container: ModelContainer = {
         do {
-            return try ModelContainer(for: StoredRetelling.self)
+            let schema = Schema([StoredRetelling.self, BookSession.self, BookEvent.self])
+            let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
             fatalError("Could not open the retelling store: \(error)")
         }

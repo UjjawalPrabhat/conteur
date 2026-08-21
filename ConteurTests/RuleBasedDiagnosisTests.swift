@@ -310,7 +310,8 @@ struct RuleBasedDiagnosisTests {
             entitiesIntroduced: introduces,
             entitiesReferenced: references,
             statesStakes: statesStakes,
-            connectsCausally: connectsCausally
+            connectsCausally: connectsCausally,
+            expectedEmotion: nil
         )
     }
 

@@ -50,7 +50,8 @@ struct SwiftDataRetellingStore: RetellingStore {
             guard !values.isEmpty else { return }
             partial[dimension] = values.reduce(0, +) / Double(values.count)
         }
-        return Baseline(scores: scores)
+        return Baseline(scores: scores, emotionProfiles: [:]
+)
     }
 
     func lastBand(for dimension: Dimension) -> Band? {

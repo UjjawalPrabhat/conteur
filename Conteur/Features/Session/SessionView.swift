@@ -6,6 +6,8 @@ struct SessionView: View {
     let history: Band?
     let previous: Diagnosis?
     let readingProgress: ReadingProgress
+    let book: BookSession?
+    let bookContext: BookContext?
     @Binding var isTelling: Bool
     let onFinish: (Assessment) -> Void
 
@@ -16,6 +18,12 @@ struct SessionView: View {
             Color(.systemBackground).ignoresSafeArea()
 
             VStack {
+                if let book {
+                    Text(book.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
                 if model.isListening {
                     SelfView(image: model.selfView, reading: model.reading)
                         .padding(.top, 12)
@@ -52,7 +60,25 @@ struct SessionView: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: model.phase)
-        .task { model.prime(baseline: baseline, history: history, previous: previous, challenge: challenge, readingProgress: readingProgress) }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Back") {
+                    Task { await model.end() }
+                }
+                .disabled(!model.isListening)
+            }
+        }
+        .task {
+            model.prime(
+                baseline: baseline,
+                history: history,
+                previous: previous,
+                challenge: challenge,
+                readingProgress: readingProgress,
+                book: book,
+                bookContext: bookContext
+            )
+        }
         .onChange(of: model.phase) { _, phase in
             isTelling = phase == .listening || phase == .reading
             if phase == .responding, let assessment = model.assessment {

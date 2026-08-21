@@ -21,6 +21,7 @@ struct Beat: Sendable, Hashable {
     let entitiesReferenced: [String]
     let statesStakes: Bool
     let connectsCausally: Bool
+    let expectedEmotion: String?
 
     var duration: TimeInterval { end - start }
 }
@@ -62,13 +63,20 @@ extension [Beat] {
                 },
                 entitiesReferenced: beat.entitiesReferenced + reclassified,
                 statesStakes: beat.statesStakes,
-                connectsCausally: beat.connectsCausally
+                connectsCausally: beat.connectsCausally,
+                expectedEmotion: beat.expectedEmotion
             )
 
             seen.formUnion(beat.entitiesIntroduced)
             seen.formUnion(beat.entitiesReferenced)
             return corrected
         }
+    }
+}
+
+extension [Beat] {
+    func emotionalBeats() -> [Beat] {
+        filter { $0.kind == .emotional && $0.expectedEmotion != nil }
     }
 }
 

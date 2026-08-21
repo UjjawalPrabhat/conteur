@@ -23,6 +23,7 @@ enum ExpressionChannel: String, Sendable, Hashable, CaseIterable {
 struct ExpressionSample: Sendable, Hashable {
     let at: TimeInterval
     let coefficients: [ExpressionChannel: Float]
+    let probabilities: [String: Double]? = nil
 
     func value(_ channel: ExpressionChannel) -> Float {
         coefficients[channel] ?? 0

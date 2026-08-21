@@ -105,10 +105,17 @@ struct Diagnosis: Sendable {
 /// least for them rather than whichever dimension is hardest in general.
 struct Baseline: Sendable, Hashable {
     let scores: [Dimension: Double]
+    let emotionProfiles: [DetectedEmotion: EmotionBaselineProfile]
 
-    static let none = Baseline(scores: [:])
+    static let none = Baseline(scores: [:], emotionProfiles: [:]
+)
 
     func score(for dimension: Dimension) -> Double? {
         scores[dimension]
     }
+}
+
+struct EmotionBaselineProfile: Sendable, Hashable, Codable {
+    let meanConfidence: Double
+    let dominantEmotion: DetectedEmotion
 }
