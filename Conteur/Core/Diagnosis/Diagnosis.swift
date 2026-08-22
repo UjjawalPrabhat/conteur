@@ -6,6 +6,9 @@ enum Dimension: String, Sendable, Hashable, CaseIterable, Codable {
     case relevance
     case engagement
     case delivery
+    /// Whether they told the story that was actually there. Only measurable because the
+    /// app supplied the story — there is nothing to be unfaithful to otherwise.
+    case fidelity
 
     var title: String {
         rawValue.capitalized
@@ -31,8 +34,20 @@ enum Band: String, Sendable, Hashable, CaseIterable, Comparable {
         }
     }
 
+    /// Ordered by how much each claims, so `insufficient` is below `emerging` rather than
+    /// beside it. Declared rather than derived from `allCases`, which needed a force unwrap
+    /// to say something the compiler can check.
+    private var rank: Int {
+        switch self {
+        case .insufficient: 0
+        case .emerging: 1
+        case .developing: 2
+        case .strong: 3
+        }
+    }
+
     static func < (lhs: Band, rhs: Band) -> Bool {
-        allCases.firstIndex(of: lhs)! < allCases.firstIndex(of: rhs)!
+        lhs.rank < rhs.rank
     }
 
     init(score: Double) {
@@ -47,9 +62,22 @@ enum Band: String, Sendable, Hashable, CaseIterable, Comparable {
 /// A claim's receipt. Every finding must carry at least one, so no feedback can be
 /// given that the speaker cannot go back and hear for themselves.
 struct Evidence: Sendable, Hashable {
-    let at: TimeInterval
+    /// When it happened, or nil when the finding is about something absent. You cannot
+    /// point at the moment somebody failed to say something.
+    let at: TimeInterval?
     let quote: String?
     let measure: String?
+
+    static func at(_ time: TimeInterval, quote: String? = nil, measure: String? = nil) -> Evidence {
+        Evidence(at: time, quote: quote, measure: measure)
+    }
+
+    /// Something the story had that the retelling did not.
+    static func missing(_ quote: String, measure: String? = nil) -> Evidence {
+        Evidence(at: nil, quote: quote, measure: measure)
+    }
+
+    var isLocated: Bool { at != nil }
 }
 
 struct Finding: Sendable, Hashable {

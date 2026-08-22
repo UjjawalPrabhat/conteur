@@ -6,53 +6,31 @@ import Testing
 struct RuleBasedDiagnosisTests {
     private let diagnosis = RuleBasedDiagnosis()
 
+    // MARK: - Saying nothing
+
     @Test func nothingIsDiagnosedWithoutARetelling() {
-        #expect(diagnosis.diagnose(.empty, against: .none).focus == nil)
+        let empty = DiagnosticInput.nothing(for: Fixture.story)
+
+        #expect(diagnosis.diagnose(empty, against: .none).focus == nil)
     }
 
-    /// A two-word retelling used to report strong across every dimension, because no
-    /// rule could fire and nothing firing was scored as nothing wrong.
+    /// A two-word retelling used to report strong across every dimension, because no rule
+    /// could fire and nothing firing was scored as nothing wrong.
     @Test func tooLittleToJudgeIsNotReportedAsStrong() {
-        let barelyAnything = DiagnosticInput(
-            timeline: FeatureTimeline(
-                transcript: filled(words: 2, fillers: 0),
-                delivery: DeliveryAnalyzer().analyze(filled(words: 2, fillers: 0)),
-                prosody: [],
-                expressivity: []
-            ),
-            narrative: .empty
+        let input = Fixture.input(
+            Fixture.comparison(told: []),
+            transcript: Fixture.transcript(words: 2)
         )
 
-        let result = diagnosis.diagnose(barelyAnything, against: .none)
+        let result = diagnosis.diagnose(input, against: .none)
 
         #expect(result.assessments.allSatisfy { $0.band == .insufficient })
         #expect(result.focus == nil)
     }
 
-    /// A dimension speaks when at least one of its rules had something to look at, and
-    /// stays quiet otherwise — the prerequisite belongs to each rule, not to the
-    /// dimension as a whole.
-    @Test func aDimensionSpeaksOnlyWhenOneOfItsRulesCouldLook() {
-        let oneBeat = input(beats: [beat(0, 30, .corePlot, statesStakes: true)])
-
-        let result = diagnosis.diagnose(oneBeat, against: .none)
-
-        // Nothing about engagement is available here: stakes needs two core beats, pitch
-        // needs voiced audio, and expression needs a located climax.
-        #expect(result.assessment(for: .engagement)?.band == .insufficient)
-        // Structure and sequencing can both be read from a single beat.
-        #expect(result.assessment(for: .structure)?.band != .insufficient)
-        #expect(result.assessment(for: .coherence)?.band != .insufficient)
-    }
-
     /// The flagged weakness cannot also be described as strong.
     @Test func aDimensionWithAFindingIsNeverStrong() {
-        let input = input(
-            beats: [
-                beat(0, 30, .corePlot, introduces: ["brother"], statesStakes: true),
-                beat(30, 60, .corePlot, references: ["protagonist"], connectsCausally: true),
-            ]
-        )
+        let input = Fixture.input(Fixture.comparison(told: [1, 2], mentioning: ["Aren"]))
 
         let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
 
@@ -60,198 +38,251 @@ struct RuleBasedDiagnosisTests {
         #expect(coherence?.band != .strong)
     }
 
-    @Test func introducingSomethingAndNeverReturningToItIsFound() {
-        let input = input(beats: [
-            beat(0, 30, .corePlot, introduces: ["brother"]),
-            beat(30, 60, .corePlot, references: ["protagonist"]),
-        ])
+    // MARK: - What the story makes measurable
+
+    @Test func anEventTheStoryTurnedOnAndTheyLeftOutIsFound() {
+        let input = Fixture.input(Fixture.comparison(told: [1, 2, 3]))
+
+        let structure = diagnosis.diagnose(input, against: .none).assessment(for: .structure)
+
+        #expect(structure?.findings.isEmpty == false)
+        // One finding carrying every omission, not one per beat.
+        #expect(structure?.findings.count == 1)
+        #expect(structure?.findings.first?.subject == "omitted-events")
+        #expect(structure?.findings.first?.evidence.count == 4)
+    }
+
+    @Test func tellingTheWholeStoryLeavesStructureAlone() {
+        let input = Fixture.input(Fixture.faithful)
+
+        #expect(diagnosis.diagnose(input, against: .none).assessment(for: .structure)?.findings.isEmpty == true)
+    }
+
+    @Test func aCentralCharacterNeverMentionedIsFound() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), mentioning: ["Aren"])
+        )
 
         let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
 
-        #expect(coherence?.findings.count == 1)
-        #expect(coherence?.findings.first?.observation.contains("brother") == true)
-        #expect(coherence?.findings.first?.evidence.first?.at == 0)
+        #expect(coherence?.findings.contains { $0.subject == "missing-the silver fish" } == true)
     }
 
-    @Test func aThreadPickedUpLaterIsNotAFinding() {
-        let input = input(beats: [
-            beat(0, 30, .corePlot, introduces: ["brother"]),
-            beat(30, 60, .corePlot, references: ["brother"]),
-        ])
+    @Test func eventsToldOutOfOrderAreFound() {
+        let input = Fixture.input(Fixture.comparison(told: [1, 5, 2, 6, 3]))
+
+        let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
+
+        #expect(coherence?.findings.contains { $0.subject == "order" } == true)
+    }
+
+    @Test func tellingEventsInTheStorysOrderIsNotFlagged() {
+        let input = Fixture.input(Fixture.faithful)
 
         #expect(diagnosis.diagnose(input, against: .none).assessment(for: .coherence)?.findings.isEmpty == true)
     }
 
-    @Test func timeSpentOnInconsequentialDetailSurfacesRelevance() {
-        let input = input(beats: [
-            beat(0, 20, .corePlot),
-            beat(20, 120, .lowValue),
-        ])
+    /// The story authored the causal link, so no judgement is needed about whether the
+    /// retelling *felt* connected — the effect was told and its cause was not.
+    @Test func anEffectToldWithoutItsCauseIsFound() {
+        let input = Fixture.input(Fixture.comparison(told: [1, 2, 3, 6]))
+
+        let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
+
+        #expect(coherence?.findings.contains { $0.subject == "uncaused-6" } == true)
+    }
+
+    @Test func notConveyingWhyItMatteredIsFound() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), conveyedStakes: false)
+        )
+
+        let engagement = diagnosis.diagnose(input, against: .none).assessment(for: .engagement)
+
+        #expect(engagement?.findings.contains { $0.subject == "stakes" } == true)
+    }
+
+    /// A beat the model judged covered but paraphrased instead of quoting used to be
+    /// discarded, which turned a told story into a total omission.
+    @Test func aBeatCoveredWithoutAQuotableQuoteStillCounts() {
+        let everything = Fixture.story.beats.map(\.id)
+        let paraphrased = Fixture.comparison(told: everything, unlocated: Set(everything))
+        let input = Fixture.input(paraphrased)
+
+        let result = diagnosis.diagnose(input, against: .none)
+
+        #expect(paraphrased.covered.count == everything.count)
+        #expect(paraphrased.located.isEmpty)
+        #expect(result.assessment(for: .structure)?.findings.isEmpty == true)
+        #expect(result.assessment(for: .fidelity)?.findings.isEmpty == true)
+    }
+
+    /// Sequence needs placed events, so an unplaced coverage must not be read as disorder.
+    @Test func orderIsNotJudgedWithoutPlacedEvents() {
+        let everything = Fixture.story.beats.map(\.id)
+        let input = Fixture.input(Fixture.comparison(told: everything, unlocated: Set(everything)))
+
+        let coherence = diagnosis.diagnose(input, against: .none).assessment(for: .coherence)
+
+        #expect(coherence?.findings.contains { $0.subject == "order" } == false)
+    }
+
+    // MARK: - Fidelity
+
+    @Test func aCharacterTheStoryNeverHadIsAFidelityFinding() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), inventing: ["Alex", "Jordan"])
+        )
+
+        let fidelity = diagnosis.diagnose(input, against: .none).assessment(for: .fidelity)
+
+        #expect(fidelity?.findings.contains { $0.subject == "invented-names" } == true)
+        #expect(fidelity?.band != .strong)
+    }
+
+    @Test func losingMostOfTheStoryIsAFidelityFinding() {
+        let input = Fixture.input(Fixture.comparison(told: [1, 2]))
+
+        let fidelity = diagnosis.diagnose(input, against: .none).assessment(for: .fidelity)
+
+        #expect(fidelity?.findings.contains { $0.subject == "coverage" } == true)
+    }
+
+    @Test func tellingItFaithfullyLeavesFidelityAlone() {
+        #expect(
+            diagnosis.diagnose(Fixture.input(Fixture.faithful), against: .none)
+                .assessment(for: .fidelity)?.findings.isEmpty == true
+        )
+    }
+
+    /// Talking about a story is not telling it. Recognising the cast but none of the events
+    /// used to dead-end with no feedback at all, which threw away a real finding.
+    @Test func talkingAboutTheStoryWithoutTellingItIsAFinding() {
+        let input = Fixture.input(
+            Fixture.comparison(told: [], mentioning: ["Aren", "Mira"]),
+            transcript: Fixture.transcript(words: 60)
+        )
+
+        let result = diagnosis.diagnose(input, against: .none)
+        let coverage = result.assessment(for: .fidelity)?.findings.first { $0.subject == "coverage" }
+
+        #expect(result.isJudgeable)
+        #expect(coverage != nil)
+        #expect(coverage?.observation.contains("rather than telling it") == true)
+        #expect(coverage?.observation.contains("Aren") == true)
+    }
+
+    /// With neither an event nor a character recognised, nothing can be claimed — a wrong
+    /// story and a failed match look identical.
+    @Test func recognisingNothingAtAllStaysUnjudged() {
+        let input = Fixture.input(
+            Fixture.comparison(told: [], mentioning: []),
+            transcript: Fixture.transcript(words: 60)
+        )
+
+        let fidelity = diagnosis.diagnose(input, against: .none).assessment(for: .fidelity)
+
+        #expect(fidelity?.band == .insufficient)
+    }
+
+    /// The model credits the setting beat whenever a character is named — it did so on every
+    /// commentary sample. Only the setting landing is not the story landing.
+    @Test func coveringOnlyTheSettingCountsAsTalkingAroundIt() {
+        let settingOnly = Fixture.comparison(told: [1])
+
+        #expect(settingOnly.narratedNothing)
+        #expect(settingOnly.talkedAroundIt)
+
+        let coverage = diagnosis.diagnose(Fixture.input(settingOnly), against: .none)
+            .assessment(for: .fidelity)?.findings.first { $0.subject == "coverage" }
+
+        #expect(coverage?.observation.contains("rather than telling it") == true)
+    }
+
+    @Test func coveringRealEventsIsNotTalkingAroundIt() {
+        #expect(Fixture.comparison(told: [1, 2, 3]).narratedNothing == false)
+    }
+
+    // MARK: - Length
+
+    @Test func aRetellingReducedToASummaryIsFlagged() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), compression: 0.1),
+            transcript: Fixture.transcript(words: 40)
+        )
 
         let relevance = diagnosis.diagnose(input, against: .none).assessment(for: .relevance)
 
-        #expect(relevance?.findings.count == 1)
-        #expect(relevance?.findings.first?.evidence.first?.measure == "100s")
+        #expect(relevance?.findings.contains { $0.subject == "skeletal" } == true)
     }
 
-    @Test func aLittleColourIsNotPadding() {
-        let input = input(beats: [
-            beat(0, 100, .corePlot),
-            beat(100, 110, .lowValue),
-        ])
-
-        #expect(diagnosis.diagnose(input, against: .none).assessment(for: .relevance)?.findings.isEmpty == true)
-    }
-
-    @Test func structuralExpectationsFollowTheShapeOfTheStory() {
-        let beats = [beat(0, 30, .corePlot), beat(30, 60, .emotional)]
-        let present: Set<StoryComponent> = [.setting, .conflict, .consequences]
-
-        let thematic = diagnosis.diagnose(
-            input(beats: beats, shape: .thematic, present: present),
-            against: .none
-        )
-        let plotDriven = diagnosis.diagnose(
-            input(beats: beats, shape: .plotDriven, present: present),
-            against: .none
+    @Test func aRetellingLongerThanTheStoryIsFlagged() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), compression: 1.1)
         )
 
-        // The same missing resolution is expected of one shape and not the other.
-        #expect(thematic.assessment(for: .structure)?.findings.isEmpty == true)
-        #expect(plotDriven.assessment(for: .structure)?.findings.isEmpty == false)
+        let relevance = diagnosis.diagnose(input, against: .none).assessment(for: .relevance)
+
+        #expect(relevance?.findings.contains { $0.subject == "padded" } == true)
     }
 
-    @Test func recountingEventsWithoutStakesSurfacesEngagement() {
-        let input = input(beats: [
-            beat(0, 30, .corePlot),
-            beat(30, 60, .corePlot),
-        ])
-
-        #expect(diagnosis.diagnose(input, against: .none).assessment(for: .engagement)?.findings.isEmpty == false)
+    @Test func aRetellingOfTheExpectedLengthIsNotFlagged() {
+        #expect(
+            diagnosis.diagnose(Fixture.input(Fixture.faithful), against: .none)
+                .assessment(for: .relevance)?.findings.isEmpty == true
+        )
     }
+
+    /// Forty-five garbled words used to certify delivery as strong, because the stall rule's
+    /// floor was low enough to evaluate and found nothing.
+    @Test func deliveryIsNotCertifiedOnTooLittleSpeech() {
+        let input = Fixture.input(Fixture.faithful, transcript: Fixture.transcript(words: 45))
+
+        #expect(diagnosis.diagnose(input, against: .none).assessment(for: .delivery)?.band == .insufficient)
+    }
+
+    // MARK: - Delivery
 
     @Test func fillersAreJudgedAgainstWordCountNotCounted() {
-        let sparse = input(beats: [beat(0, 60, .corePlot, statesStakes: true)], transcript: filled(words: 100, fillers: 2))
-        let dense = input(beats: [beat(0, 60, .corePlot, statesStakes: true)], transcript: filled(words: 100, fillers: 8))
+        let sparse = Fixture.input(Fixture.faithful, transcript: Fixture.transcript(words: 120, fillers: 2))
+        let dense = Fixture.input(Fixture.faithful, transcript: Fixture.transcript(words: 120, fillers: 12))
 
         #expect(diagnosis.diagnose(sparse, against: .none).assessment(for: .delivery)?.findings.isEmpty == true)
         #expect(diagnosis.diagnose(dense, against: .none).assessment(for: .delivery)?.findings.isEmpty == false)
     }
 
+    // MARK: - Focus
+
+    /// Getting the story wrong outranks telling it inelegantly.
     @Test func focusIsTheWeaknessThatMattersMost() {
-        let input = input(
-            beats: [
-                beat(0, 30, .corePlot, introduces: ["brother"], statesStakes: true),
-                beat(30, 60, .corePlot, references: ["protagonist"], connectsCausally: true),
-            ],
-            transcript: filled(words: 100, fillers: 8)
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), inventing: ["Alex"]),
+            transcript: Fixture.transcript(words: 120, fillers: 12)
         )
 
-        let focus = diagnosis.diagnose(input, against: .none).focus
-
-        // Both coherence and delivery fired; a story that cannot be followed outranks
-        // one with fillers in it.
-        #expect(focus?.dimension == .coherence)
+        #expect(diagnosis.diagnose(input, against: .none).focus?.dimension == .fidelity)
     }
 
     @Test func focusIsRelativeToWhatThisSpeakerUsuallyDoes() {
-        let input = input(
-            beats: [
-                beat(0, 30, .corePlot, introduces: ["brother"], statesStakes: true),
-                beat(30, 60, .corePlot, references: ["protagonist"], connectsCausally: true),
-            ],
-            transcript: filled(words: 100, fillers: 8)
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), inventing: ["Alex"]),
+            transcript: Fixture.transcript(words: 120, fillers: 12)
         )
-        let baseline = Baseline(scores: [.coherence: 0.7, .delivery: 0.95])
+        // Somebody who always invents, and does not usually stumble.
+        let baseline = Baseline(scores: [.fidelity: 0.65, .delivery: 0.95])
 
-        let focus = diagnosis.diagnose(input, against: baseline).focus
-
-        // Coherence sits where it always does for this speaker; the delivery slip is
-        // the thing that actually changed.
-        #expect(focus?.dimension == .delivery)
+        #expect(diagnosis.diagnose(input, against: baseline).focus?.dimension == .delivery)
     }
 
     @Test func theSameRetellingAlwaysDiagnosesIdentically() {
-        let input = input(
-            beats: [
-                beat(0, 30, .corePlot, introduces: ["brother"]),
-                beat(30, 130, .lowValue),
-            ],
-            transcript: filled(words: 100, fillers: 8)
+        let input = Fixture.input(
+            Fixture.comparison(told: [1, 5, 2], inventing: ["Alex"], conveyedStakes: false),
+            transcript: Fixture.transcript(words: 120, fillers: 12)
         )
 
         let runs = (0..<5).map { _ in diagnosis.diagnose(input, against: .none) }
-        let focuses = runs.map(\.focus?.dimension)
-        let bands = runs.map { $0.assessments.map(\.band) }
 
-        #expect(Set(focuses).count == 1)
-        #expect(Set(bands).count == 1)
-    }
-
-    // MARK: - Fixtures
-
-    private func beat(
-        _ start: TimeInterval,
-        _ end: TimeInterval,
-        _ kind: SpanKind,
-        introduces: [String] = [],
-        references: [String] = [],
-        statesStakes: Bool = false,
-        connectsCausally: Bool = false
-    ) -> Beat {
-        Beat(
-            start: start,
-            end: end,
-            summary: "beat at \(start)",
-            kind: kind,
-            entitiesIntroduced: introduces,
-            entitiesReferenced: references,
-            statesStakes: statesStakes,
-            connectsCausally: connectsCausally
-        )
-    }
-
-    private func input(
-        beats: [Beat],
-        shape: StoryShape = .thematic,
-        present: Set<StoryComponent> = Set(StoryComponent.allCases),
-        transcript: Transcript? = nil
-    ) -> DiagnosticInput {
-        let transcript = transcript ?? filled(words: 20, fillers: 0)
-        return DiagnosticInput(
-            timeline: FeatureTimeline(
-                transcript: transcript,
-                delivery: DeliveryAnalyzer().analyze(transcript),
-                prosody: [],
-                expressivity: []
-            ),
-            narrative: NarrativeReading(
-                beats: beats,
-                arc: NarrativeArc(
-                    shape: shape,
-                    present: present,
-                    climaxBeat: nil,
-                    sequencingIsFollowable: true
-                )
-            )
-        )
-    }
-
-    /// A transcript of a given length with a given number of filled pauses spread
-    /// through it. Words are distinct because an all-identical transcript would trip
-    /// the restart rule and obscure what a test is actually asserting.
-    private func filled(words: Int, fillers: Int) -> Transcript {
-        let positions = Set(
-            stride(from: 0, to: words, by: max(1, words / max(fillers, 1))).prefix(fillers)
-        )
-        let spoken = (0..<words).map { index in
-            let start = Double(index) * 0.4
-            return SpokenWord(
-                text: positions.contains(index) ? "um" : "word\(index)",
-                start: start,
-                end: start + 0.2
-            )
-        }
-        return Transcript(words: spoken)
+        #expect(Set(runs.map(\.focus?.dimension)).count == 1)
+        #expect(Set(runs.map { $0.assessments.map(\.band) }).count == 1)
     }
 }

@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import FoundationModels
 import Observation
 
 @MainActor
@@ -12,15 +13,17 @@ final class SessionViewModel {
         case reading
         case responding
         case tooShort
+        case unmatched
         case failed(String)
     }
 
-    /// Each chunk costs a model session, and the whole beat sheet has to fit one 4,096
-    /// token budget at the reduce step. Ten minutes is about twenty chunks — enough for
-    /// a full retelling, short enough that the analysis after you stop stays brief.
-    static let maximumDuration: TimeInterval = 10 * 60
+    /// Retelling a 350-word story should take about a minute: adults recall a third to a
+    /// half of a narrative's length, at around 150 words a minute of narrative speech.
+    /// Three minutes is generous room over that, and the comparison's reliability falls off
+    /// well before the token budget would.
+    static let maximumDuration: TimeInterval = 3 * 60
     /// The last stretch, where the speaker is told to start drawing to a close.
-    static let warningDuration: TimeInterval = 60
+    static let warningDuration: TimeInterval = 30
 
     /// Below this there is nothing to say. Saying it anyway means inventing it.
     private static let minimumWords = 40
@@ -35,30 +38,48 @@ final class SessionViewModel {
     /// True through a pause, when a listener would visibly hold your gaze.
     private(set) var isAttending = false
 
-    /// The self-view and how the face is reading right now.
-    private(set) var selfView: CGImage?
-    private(set) var reading = ExpressionReading.still
 
     private(set) var elapsed: TimeInterval = 0
+
+    /// What the transcriber actually heard. Shown when the retelling could not be matched,
+    /// because the first thing worth knowing is whether the words arrived at all.
+    var heard: String { transcript.text }
+
+    /// The transcript split where the last clause ended: what has settled, and the phrase
+    /// being spoken now. The telling screen dims the first and lights the second, so the
+    /// words being said carry and the ones already said recede.
+    var settled: String {
+        String(transcript.words.prefix(upTo: phraseStart).map(\.text).joined(separator: " "))
+    }
+
+    var phrase: String {
+        transcript.words[phraseStart...].map(\.text).joined(separator: " ")
+    }
+
+    private var phraseStart: Int {
+        guard let last = transcript.words.lastIndex(where: \.endsClause) else { return 0 }
+        return min(last + 1, transcript.words.count)
+    }
+
+    /// What a telling amounted to, for the screen that has to explain why it was too short
+    /// without scoring it.
+    var spokenWords: Int { transcript.words.count }
+    var spokenDuration: TimeInterval { transcript.duration }
 
     var remaining: TimeInterval { max(0, Self.maximumDuration - elapsed) }
     var isRunningOut: Bool { phase == .listening && remaining <= Self.warningDuration }
 
     private let transcriber: any Transcribing
-    private let narrative: any NarrativeAnalyzing
+    private let comparer: any SourceComparing
     private let diagnosing: any Diagnosing
     private let composing: any FeedbackComposing
     private let speech: any Speaking
 
     private let audio = AudioCapture()
-    private let face = FaceCapture()
     private let delivery = DeliveryAnalyzer()
     private let prosody = ProsodyAnalyzer()
-    private let expressivity = ExpressivityAnalyzer()
-    private let reader = ExpressionReader()
-    private var neutral = ExpressionBaseline()
-    private let chunker = TranscriptChunker()
 
+    private let story: GuidedStory
     private var baseline: Baseline = .none
     private var history: Band?
     /// The first telling, when this is the retell against a challenge.
@@ -68,21 +89,23 @@ final class SessionViewModel {
 
     private var transcript = Transcript.empty
     private var frames: [ProsodyFrame] = []
-    private var expressions: [ExpressionSample] = []
-    private var beats: [Beat] = []
-    private var labelledChunks = 0
     private var session: Task<Void, Never>?
     private var quietSince: TimeInterval?
+    /// Set when the telling is walked away from, so the analysis is skipped rather than
+    /// producing feedback nobody asked for.
+    private var isAbandoned = false
 
     init(
+        story: GuidedStory,
         transcriber: any Transcribing = SpeechTranscription(),
-        narrative: any NarrativeAnalyzing = OnDeviceNarrativeAnalyzer(),
+        comparer: any SourceComparing = StoryComparison(),
         diagnosing: any Diagnosing = RuleBasedDiagnosis(),
         composing: any FeedbackComposing = OnDeviceComposer(),
         speech: any Speaking = SystemSpeech()
     ) {
         self.transcriber = transcriber
-        self.narrative = narrative
+        self.story = story
+        self.comparer = comparer
         self.diagnosing = diagnosing
         self.composing = composing
         self.speech = speech
@@ -107,18 +130,13 @@ final class SessionViewModel {
                 let format = try await transcriber.preferredAudioFormat()
                 let speech = await audio.chunks()
                 let sound = await audio.chunks()
-                let faces = face.samples()
-                let views = face.previewFrames()
 
                 try await audio.start(convertingTo: format)
-                face.start()
                 phase = .listening
 
                 await withTaskGroup { group in
                     group.addTask { [weak self] in await self?.readTranscript(from: speech) }
                     group.addTask { [weak self] in await self?.readProsody(from: sound) }
-                    group.addTask { [weak self] in await self?.readExpressions(from: faces) }
-                    group.addTask { [weak self] in await self?.showSelf(from: views) }
                 }
 
                 try await respond()
@@ -139,8 +157,17 @@ final class SessionViewModel {
     /// Stops the microphone without waiting for analysis, so it is safe to call from
     /// inside the session's own task when the time limit is reached.
     private func endCapture() {
-        face.stop()
         Task { await audio.stop() }
+    }
+
+    /// Walks away from the telling: closes the microphone and produces no feedback.
+    /// Without this the view could be dismissed while capture was still running.
+    func cancel() async {
+        isAbandoned = true
+        endCapture()
+        await session?.value
+        isAbandoned = false
+        phase = .ready
     }
 
     func silence() async {
@@ -153,7 +180,6 @@ final class SessionViewModel {
         do {
             for try await update in transcriber.transcribe(chunks) {
                 transcript = update
-                await labelSettledChunks()
             }
         } catch {
             phase = .failed(error.localizedDescription)
@@ -165,21 +191,6 @@ final class SessionViewModel {
             frames.append(frame)
             observe(loudness: frame.loudness, at: frame.at)
         }
-    }
-
-    private func readExpressions(from samples: AsyncStream<ExpressionSample>) async {
-        for await sample in samples {
-            expressions.append(sample)
-            neutral.observe(sample)
-            reading = reader.read(neutral.departure(from: sample))
-        }
-    }
-
-    private func showSelf(from frames: AsyncStream<CameraFrame>) async {
-        for await frame in frames {
-            selfView = frame.image
-        }
-        selfView = nil
     }
 
     // MARK: - Presence
@@ -209,23 +220,12 @@ final class SessionViewModel {
 
     // MARK: - Analysis
 
-    /// Labels every chunk except the one still being spoken, so most of the map step is
-    /// already done by the time the speaker stops.
-    private func labelSettledChunks() async {
-        let chunks = chunker.chunks(of: transcript)
-        guard chunks.count > labelledChunks + 1 else { return }
-
-        for chunk in chunks[labelledChunks..<(chunks.count - 1)] {
-            // Advance regardless of outcome: a chunk the model declines must not be
-            // retried on every subsequent transcript update.
-            labelledChunks += 1
-            if let beat = try? await narrative.label(chunk) {
-                beats.append(beat)
-            }
-        }
-    }
-
     private func respond() async throws {
+        guard !isAbandoned else {
+            phase = .ready
+            return
+        }
+
         // Analysing a handful of words does not produce weak feedback, it produces
         // invented feedback: the model fills the summary it is asked for, and every
         // dimension reports strong because no rule had anything to fire on.
@@ -238,26 +238,39 @@ final class SessionViewModel {
         }
         phase = .reading
 
-        let chunks = chunker.chunks(of: transcript)
-        for chunk in chunks.dropFirst(labelledChunks) {
-            labelledChunks += 1
-            if let beat = try? await narrative.label(chunk) {
-                beats.append(beat)
-            }
-        }
-
-        let narrativeReading = NarrativeReading(
-            beats: beats,
-            arc: (try? await narrative.arc(from: beats)) ?? NarrativeReading.empty.arc
-        )
         let timeline = FeatureTimeline(
             transcript: transcript,
             delivery: delivery.analyze(transcript),
-            prosody: frames,
-            expressivity: expressivity.windows(from: expressions)
+            prosody: frames
         )
+        // One comparison against the story, in one model session. The whole map-reduce
+        // existed only because structure had to be inferred with nothing to compare to.
+        //
+        // A thrown error is reported rather than degraded into an empty comparison: those
+        // look identical downstream, and "nothing matched" would be blamed on the speaker.
+        let source: SourceComparison
+        do {
+            source = try await comparer.compare(transcript, with: story)
+        } catch {
+            // A guardrail refusal is not something the speaker did, and "Detected content
+            // likely to be unsafe" is not something to show somebody who just retold a story
+            // about a bereavement.
+            phase = .failed(
+                error.isGuardrailRefusal
+                    ? "I couldn't work through that one. Try telling it again."
+                    : error.localizedDescription
+            )
+            return
+        }
+        // Nothing recognisable at all — not an event, not a character. Scoring it would
+        // mean guessing whether they told a different story or the matching simply failed.
+        // Recognising the cast but none of the events is a finding, not an unknown.
+        guard source.recognisedSomething else {
+            phase = .unmatched
+            return
+        }
         let diagnosis = diagnosing.diagnose(
-            DiagnosticInput(timeline: timeline, narrative: narrativeReading),
+            DiagnosticInput(timeline: timeline, comparison: source),
             against: baseline
         )
         let progress = previous.flatMap { first in
@@ -272,7 +285,7 @@ final class SessionViewModel {
         assessment = Assessment(
             recordedAt: .now,
             timeline: timeline,
-            narrative: narrativeReading,
+            comparison: source,
             diagnosis: diagnosis,
             feedback: feedback,
             progress: progress
@@ -289,11 +302,8 @@ final class SessionViewModel {
     private func reset() {
         transcript = .empty
         frames = []
-        expressions = []
-        neutral = ExpressionBaseline()
         elapsed = 0
-        beats = []
-        labelledChunks = 0
+        isAbandoned = false
         assessment = nil
         level = 0
         isAttending = false

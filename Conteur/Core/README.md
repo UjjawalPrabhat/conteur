@@ -25,7 +25,7 @@ flowchart LR
         P["Write 4 sentences from<br/>supplied facts<br/><i>phrasing</i>"]
     end
     subgraph swift["Swift — everything that decides"]
-        T["timings · pitch · expression"]
+        T["timings · pitch · loudness"]
         E["entity tracking"]
         A["time accounting"]
         S["scoring · weakness selection"]
@@ -44,8 +44,8 @@ That reframing is what makes a 3B model sufficient.
 
 ```mermaid
 flowchart TD
+    story["📖 GuidedStory<br/>authored beats · cast · stakes"] --> cmp
     mic["🎙 AVAudioEngine"] --> fan{{"AudioFanout<br/>one tap, three consumers"}}
-    cam["📷 ARFaceTrackingConfiguration"] --> face["FaceCapture"]
 
     fan --> tx["Transcription"]
     fan --> pr["Prosody"]
@@ -53,17 +53,13 @@ flowchart TD
 
     tx --> tl["FeatureTimeline"]
     pr --> tl
-    face --> tl
 
-    tx --> chunk["TranscriptChunker"]
-    chunk --> passA["Pass A · label each chunk"]
-    passA --> beats["[Beat]"]
-    beats --> passB["Pass B · reduce to arc"]
-    passB --> arc["NarrativeArc"]
+    tx --> cmp["StoryComparison<br/>one call per event"]
+    cmp --> corr["SourceMatcher<br/>corroborate · order · invention"]
+    corr --> src["SourceComparison"]
 
-    tl --> diag["RuleBasedDiagnosis<br/>12 rules"]
-    beats --> diag
-    arc --> diag
+    tl --> diag["RuleBasedDiagnosis<br/>13 rules"]
+    src --> diag
 
     diag --> focus["one weakness + evidence"]
     focus --> comp["OnDeviceComposer"]
@@ -72,8 +68,8 @@ flowchart TD
     again --> mic
 
     style diag fill:#2d4a3e,stroke:#4a7c59,color:#fff
-    style passA fill:#3d3a5c,stroke:#6b63a3,color:#fff
-    style passB fill:#3d3a5c,stroke:#6b63a3,color:#fff
+    style corr fill:#2d4a3e,stroke:#4a7c59,color:#fff
+    style cmp fill:#3d3a5c,stroke:#6b63a3,color:#fff
     style comp fill:#3d3a5c,stroke:#6b63a3,color:#fff
 ```
 
@@ -92,13 +88,9 @@ actor.
 |---|---|---|
 | `AudioCapture.chunks()` | [Capture/AudioCapture.swift](Capture/AudioCapture.swift) | call once per consumer, before `start` |
 | `AudioCapture.start(convertingTo:)` | " | converts to the format `SpeechAnalyzer` asks for |
-| `FaceCapture.samples()` | [Capture/FaceCapture.swift](Capture/FaceCapture.swift) | 14 blendshape channels at 10Hz |
-| `FaceCapture.previewFrames()` | " | 320px stills at 15fps for the self-view |
 
-**Nothing is recorded — audio or video.** `FaceCapture` reads exactly two things off each
-ARKit frame, `blendShapes` and `timestamp`, and the preview is converted, handed to the
-view and dropped. Audio buffers are transcribed and analysed as they arrive and are never
-written to disk. The transcript is the only thing that outlives the session.
+**Nothing is recorded.** Audio buffers are transcribed and analysed as they arrive and are
+never written to disk. The transcript is the only thing that outlives the session.
 
 ---
 
@@ -136,72 +128,54 @@ interjections), and restarts found as repeated 2–4 word n-grams.
 Autocorrelation over 70–350 Hz via `vDSP_dotpr`; correlation below `0.3` means unvoiced.
 Gives the pitch contour the transcript cannot.
 
-**`ExpressionBaseline` → `ExpressionReader.read(_:)`** — [Signal/](Signal/)
-Resting faces differ, so absolute thresholds label one person permanently tense and
-another permanently flat. `ExpressionBaseline` learns *your* neutral (falls fast toward
-lower readings, rises at `0.002` so a held expression is not absorbed), and the reader
-works on **departures from it**:
-
-```mermaid
-flowchart LR
-    raw["52 blendshapes"] --> keep["14 kept"]
-    keep --> base["− your neutral"]
-    base --> mv["brows · eyes · mouth · squint"]
-    mv --> imp["flat · animated · warm<br/>tense · sombre · surprised"]
-```
-
-`jawOpen` is excluded from the stillness gate — speaking holds it open continuously, so
-counting it would measure *whether you are talking*, not whether your face is doing
-anything.
-
 Everything lands in **`FeatureTimeline`** — [Signal/FeatureTimeline.swift](Signal/FeatureTimeline.swift) —
-which exposes `pitchVariation`, `dynamicRange`, `wordsPerMinute(in:)`,
-`expressivity(at:)` and `words(in:)` for the rules to query.
+which exposes `pitchVariation`, `dynamicRange`, `wordsPerMinute(in:)` and `words(in:)`
+for the rules to query.
 
 ---
 
-## Stage 3 · Narrative — the model's first job
+## Stage 3 · Comparison — the model's one judgement call
 
-**`TranscriptChunker.chunks(of:)`** — [Narrative/TranscriptChunker.swift](Narrative/TranscriptChunker.swift)
-splits at pauses ≥ 0.5s once a chunk passes 60s, hard-breaking at 90s.
+The app chose the story, so the answers are already known. That is what makes this stage
+small: **only one question needs a model at all** — did this retelling cover this event? —
+and everything else is measured in Swift against the authored beats.
 
-It will not emit a chunk under **12 words**: a trailing fragment is folded into the chunk
-before it, and a retelling that never reaches 12 words produces no chunks at all. This
-matters more than it looks — asked to summarise two words, the model does not decline, it
-*invents a scene*. The guard is in Swift because the model has no way to refuse.
-
-**Pass A · `OnDeviceNarrativeAnalyzer.label(_:)`** runs **per chunk in a fresh
-`LanguageModelSession`**. Sessions accumulate context; a shared one would exhaust the
-budget partway through. It runs *during* the retelling, so only the reduce remains when
-you stop.
+**`StoryComparison.compare(_:with:)`** — [Comparison/StoryComparison.swift](Comparison/StoryComparison.swift)
+asks that question **once per event**, each in a fresh `LanguageModelSession`, bounded to
+three at a time. Asked about several events in one prompt the model answers per batch
+rather than per event: on every commentary sample it credited exactly the first batch of
+three and nothing after it, which is position rather than judgement.
 
 ```
-┌──── Beat ─────────────────────────────────────┐
-│ start / end        2:14 – 3:02                │
-│ summary            "argues with his brother"  │
-│ kind               corePlot                   │
-│ entitiesIntroduced ["brother", "the house"]   │
-│ entitiesReferenced ["protagonist"]            │
-│ statesStakes       true                       │
-│ connectsCausally   true                       │
-└───────────────────────────────────────────────┘
+┌──── CoverageDraft ─────────────────────────────┐
+│ covered   true                                 │
+│ quote     "she found the letters in the desk"   │
+└────────────────────────────────────────────────┘
 ```
 
-**Pass B · `arc(from:)`** sees only the numbered summaries — ~400 tokens for ten minutes —
-and returns a `NarrativeArc`: shape, components present, climax index, whether sequencing
-is followable.
+A refused event is left **unresolved** rather than reported as an omission — the guardrail
+refuses individual events unpredictably, and blaming the speaker for that is the one thing
+this stage must not do. Only a comparison where nothing at all was judged fails.
 
-Story shape is classified **first**, and expectations follow from it, so a thematic
-retelling is not marked down for lacking a tidy resolution:
+**`SourceMatcher`** — [Comparison/SourceMatcher.swift](Comparison/SourceMatcher.swift) —
+then rules on what the model said, and computes everything it was never asked:
 
-| Shape | Expected components |
+| What | How |
 |---|---|
-| `plotDriven` | setting · initiatingEvent · conflict · attempts · consequences · resolution |
-| `characterDriven` | setting · initiatingEvent · goal · conflict · consequences |
-| `thematic` | setting · conflict · consequences |
-| `episodic` | setting · initiatingEvent · attempts |
+| `corroborates(_:_:in:)` | an event's summary uses words no other event's does; at least one has to be in the retelling |
+| `vocabularyOverlap(_:_:in:)` | how many of them are, so strong evidence can overrule a denial |
+| `mentions(_:)` | a name counts as said allowing a determiner and a plural, and nothing looser |
+| `entities(in:from:)` | which of the cast were named, matched on whole words |
+| `inventedNames(in:from:)` | capitalised, not sentence-initial, absent from the story |
+| `orderAccuracy(of:)` | concordant pairs over located coverage |
 
-Defined by `StoryComponent.expected(for:)` in [../Shared/Beat.swift](../Shared/Beat.swift).
+Both directions of that first check earned their place the hard way. Requiring a
+distinctive *name* as well threw out eight real coverages out of nine misses; requiring
+nothing credited commentary with events it never told.
+
+The result is a **`SourceComparison`**: covered, omitted, unresolved, rejected, which of
+the cast were named, which names were invented, order accuracy, compression, and whether
+the point came through.
 
 ---
 
@@ -213,7 +187,7 @@ editing a `switch`.
 
 ```mermaid
 flowchart TD
-    input["DiagnosticInput<br/>timeline + narrative"] --> r["12 rules"]
+    input["DiagnosticInput<br/>timeline + comparison"] --> r["13 rules"]
     r --> f["[Finding]<br/>observation · weight · evidence"]
     input --> judge{"canJudge?"}
     judge -->|no| ins["insufficient<br/><i>says nothing</i>"]
@@ -246,18 +220,22 @@ of you is not simultaneously described as a strength.
 
 | Rule | Dimension | Fires when | Weight |
 |---|---|---|---|
-| `MissingComponentsRule` | structure | a component the shape expects is absent | 0.25 each |
-| `DroppedThreadRule` | coherence | entity introduced, never referenced again | 0.30 |
-| `CausalDensityRule` | coherence | < 40% of beats connect causally (≥3 beats) | 0.30 |
-| `SequencingRule` | coherence | Pass B says order is hard to follow | 0.35 |
+| `OmittedEventRule` | structure | a load-bearing event never came through | 0.15 each, +0.25 if it was the climax |
+| `OmittedCharacterRule` | coherence | a central character was never named | 0.30 |
+| `SequenceAccuracyRule` | coherence | order accuracy below 0.85 | 0.30 |
+| `UncausedEventRule` | coherence | an event told without the event that caused it | 0.25 |
 | `RestartRule` | coherence | > 3 restarts | 0.20 |
-| `TimeAllocationRule` | relevance | > 25% of time on lowValue/offTopic | 0.35 |
-| `StakesGapRule` | engagement | ≥2 core beats, no beat states stakes | 0.40 |
+| `CompressionRule` | relevance | skeletal (0.30) or padded (0.25) against expected recall | 0.30 / 0.25 |
+| `StakesRule` | engagement | the point of the story never came through | 0.40 |
 | `MonotoneRule` | engagement | pitch variation < 0.12 | 0.30 |
-| `FlatClimaxRule` | engagement | expressivity < 0.02 at the climax | 0.25 |
+| `InventionRule` | fidelity | a name the story never had | 0.35 |
+| `CoverageRule` | fidelity | under half the load-bearing events told | 0.30, or 0.50 if nothing was narrated |
 | `FilledPauseRule` | delivery | filler rate > 4% (≥50 words) | 0.20 |
 | `StallRule` | delivery | > 2 silences over 3s | 0.25 |
 | `RushedClimaxRule` | delivery | climax > 1.2× your own average pace | 0.25 |
+
+Every rule reads `SourceComparison` or `FeatureTimeline` and nothing else. None of them
+consults the model, which is what makes the same recording always score the same.
 
 ### Picking the one weakness
 
@@ -282,7 +260,7 @@ Bounded at both ends, in `SessionViewModel`:
 | | | Why |
 |---|---|---|
 | **Minimum** | 40 words **and** 20 seconds | Below this there is nothing to analyse. Analysing anyway does not give weak feedback, it gives invented feedback. |
-| **Maximum** | 10 minutes | ~20 chunks. Each costs a model session, and Pass B's beat sheet has to fit one 4,096-token budget. |
+| **Maximum** | 3 minutes | One model call per event, and a 350-word story's beat sheet plus a retelling has to fit one 4,096-token budget. |
 
 The last 60 seconds show a warning; at the cap the turn ends itself through
 `endCapture()`, which stops the microphone without awaiting the session task it is called
@@ -345,7 +323,7 @@ contradict it. The model phrases the outcome; it does not decide it.
 
 | What attempt 2 passes to a model | |
 |---|---|
-| Pass A / Pass B | **nothing** — deliberately blind, so it cannot be primed to see improvement that is not there |
+| `StoryComparison` | **nothing** — deliberately blind, so it cannot be primed to see improvement that is not there |
 | Composer | the challenge, the verdict, and the resolved / still-there / new findings |
 
 ---
@@ -378,7 +356,7 @@ Three tiers, used consistently below:
 
 ### Structure ●
 
-`StoryComponent` in [../Shared/Beat.swift](../Shared/Beat.swift) is close to Stein &
+`StoryComponent` in [Library/GuidedStory.swift](Library/GuidedStory.swift) is close to Stein &
 Glenn's episode categories:
 
 | Ours | Source |
@@ -397,24 +375,28 @@ Labov's **abstract** and **coda** are not modelled at all.
 
 | Rule | Source | Tier |
 |---|---|:--:|
-| `CausalDensityRule` | Trabasso & van den Broek — causal connectivity predicts what listeners recall and rate as important | ● |
-| `DroppedThreadRule` | Entity-based coherence (Centering Theory; Barzilay & Lapata's entity grid) | ◐ we check introduced-then-never-referenced; the sources model *transition types* between mentions |
+| `UncausedEventRule` | Trabasso & van den Broek — causal connectivity predicts what listeners recall and rate as important | ● the story's own `causedBy` links, rather than a judgement about them |
+| `OmittedCharacterRule` | Entity-based coherence (Centering Theory; Barzilay & Lapata's entity grid) | ◐ we check whether a central character was named at all; the sources model *transition types* between mentions |
 | `RestartRule` | Levelt, self-repair | ● |
-| `SequencingRule` | Labov's temporal-ordering requirement | ◐ reduced to one boolean from the model |
+| `SequenceAccuracyRule` | Labov's temporal-ordering requirement | ● concordant pairs against the authored order, not an impression of it |
 
-### Relevance ○
+### Relevance ◐
 
-`SpanKind` (`corePlot · context · character · emotional · lowValue · offTopic`) and
-`TimeAllocationRule` are **invented**. We made up the taxonomy and ask the model to apply
-it, which means the most consequential judgement in the system — what counted as padding —
-rests on a 3B model's opinion of narrative value.
+`CompressionRule` measures the retelling's length against what immediate recall of a story
+this length would be expected to run to — **Brysbaert's** reading rate and the recall
+ratios below. That is a real basis for "too thin" and "padded", where the taxonomy this
+replaced asked the model to rule on what counted as narrative value.
+
+What it does *not* do is say which parts were padding. Length is measurable; worth is not.
 
 ### Engagement ◐
 
-`statesStakes` is **Labov's evaluation**: the clauses telling a listener why the story was
-worth telling at all. This is the strongest research link in the codebase.
+`StakesRule` is **Labov's evaluation**: the clauses telling a listener why the story was
+worth telling at all. This is the strongest research link in the codebase. The story's own
+`stakes` line is authored, and the model has to quote the words that carried it — a quote
+that is not in the retelling is not evidence of anything.
 
-`MonotoneRule` and `FlatClimaxRule` are **○ invented**. Prosodic expressiveness has a
+`MonotoneRule` is **○ invented**. Prosodic expressiveness has a
 literature; we did not operationalise from it.
 
 ### Delivery ●
@@ -432,9 +414,7 @@ the same literature.
 
 ### Everything else ○
 
-`StoryShape`, `ConveyedImpression`, every numeric threshold, the importance weights, and
-the band boundaries. `ConveyedImpression` deliberately avoids mapping to Ekman's basic
-emotions, though the ARKit blendshapes underneath it correspond to FACS action units.
+Every numeric threshold, the importance weights, and the band boundaries.
 
 ---
 
@@ -442,17 +422,18 @@ emotions, though the ARKit blendshapes underneath it correspond to FACS action u
 
 **1 · Labov's evaluation is badly underweighted.** He treated evaluation as the thing that
 separates a story from a report, and as *distributed throughout* a narrative rather than
-located in one place. We reduce it to a single `statesStakes` boolean per beat, and
-`StakesGapRule` fires only when **no** beat has stakes at all — so a twelve-minute
-retelling that states stakes once, anywhere, passes clean. The gap between how central the
-research considers this and how coarsely we measure it is the largest in the system.
+located in one place. We reduce it to one authored `stakes` line per story, and
+`StakesRule` fires only when it never came through at all — so a retelling that lands the
+point once, anywhere, passes clean. The gap between how central the research considers this
+and how coarsely we measure it is the largest in the system.
 
-**2 · Relevance should be derived, not labelled.** The literature already defines narrative
-importance without needing an opinion: **membership in the causal chain**. Events on the
-chain are recalled more and judged more important. We already extract `connectsCausally`
-per beat, so `lowValue` could be *computed* from causal-chain membership instead of asked
-for — which would move relevance from ○ to ●, and make it the best-grounded dimension
-rather than the worst.
+**2 · Nothing measures which parts were worth telling.** `CompressionRule` rules on
+*length*, and the literature defines narrative importance without needing an opinion:
+**membership in the causal chain**. Events on the chain are recalled more and judged more
+important. The stories already author `causedBy` links, so which of the events a reteller
+spent their time on could be weighted by causal-chain membership — the one measurement
+that would let the app say a retelling was long in the wrong places rather than only that
+it was long.
 
 ### References
 
@@ -464,8 +445,6 @@ rather than the worst.
 - Barzilay & Lapata (2008), *Modeling Local Coherence: An Entity-Based Approach*
 - Levelt (1983), *Monitoring and Self-Repair in Speech*
 - Segalowitz (2010), *Cognitive Bases of Second Language Fluency*; Skehan on speed/breakdown/repair fluency
-- Ekman & Friesen (1978), *Facial Action Coding System*
-- Barrett et al. (2019), *Emotional Expressions Reconsidered* — why `ConveyedImpression` describes what a face conveys rather than what it feels
 
 ---
 

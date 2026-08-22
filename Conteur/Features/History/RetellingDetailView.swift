@@ -3,96 +3,116 @@ import SwiftUI
 struct RetellingDetailView: View {
     let retelling: StoredRetelling
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: Space.xxl) {
                 header
                 if let note = retelling.note {
                     Text(note)
-                        .font(.title3)
+                        .textStyle(.summary)
+                        .foregroundStyle(Color.paper.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let challenge = retelling.challenge {
-                    labelled("What to try", challenge)
+                    Callout(text: challenge)
                 }
                 scores
                 transcript
             }
-            .padding()
+            .screenPadding()
+            .padding(.top, Space.l)
+            .padding(.bottom, Space.section)
         }
-        .navigationTitle(retelling.recordedAt.formatted(.dateTime.day().month()))
-        .navigationBarTitleDisplayMode(.inline)
+        .scrollIndicators(.hidden)
+        .background(NightBackground())
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top) {
+            HStack {
+                BackButton(title: "Retellings") { dismiss() }
+                Spacer()
+            }
+            .screenPadding()
+            .padding(.bottom, Space.s)
+        }
     }
 
     private var header: some View {
-        HStack {
-            if let focus = retelling.focusDimension {
-                Text(focus.title)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(.tint.opacity(0.12), in: .capsule)
-            }
-            if retelling.attempt > 1 {
-                Text("second telling")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text("\(retelling.wordCount) words · \(retelling.duration.secondsLabel)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+        VStack(alignment: .leading, spacing: Space.s) {
+            Text(retelling.storyTitle ?? "A story")
+                .textStyle(.detailTitle)
+                .foregroundStyle(Ink.primary)
+            Text(meta)
+                .textStyle(.meta)
+                .foregroundStyle(Ink.tertiary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var meta: String {
+        var parts = [retelling.recordedAt.formatted(.dateTime.day().month().hour().minute())]
+        if retelling.attempt > 1 { parts.append("second telling") }
+        parts.append("\(retelling.wordCount) words")
+        parts.append(retelling.duration.secondsLabel)
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
     private var scores: some View {
         let scores = retelling.scores
         if !scores.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("How it read")
-                    .font(.headline)
-                ForEach(Dimension.allCases, id: \.self) { dimension in
-                    if let score = scores[dimension] {
-                        HStack {
-                            Text(dimension.title)
-                            Spacer()
-                            Text(Band(score: score).label)
-                                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: Space.md) {
+                SectionHeading(title: "How it read")
+                VStack(spacing: 0) {
+                    ForEach(Array(rated(scores).enumerated()), id: \.element.dimension) { index, row in
+                        if index > 0 {
+                            Rectangle().fill(Surface.dividerQuiet).frame(height: 1)
                         }
-                        .font(.callout)
+                        HStack {
+                            Text(row.dimension.title)
+                                .textStyle(.rowTitle)
+                                .foregroundStyle(Ink.primary)
+                            Spacer()
+                            if row.dimension == retelling.focusDimension {
+                                Text("focus")
+                                    .textStyle(.eyebrowSmall)
+                                    .textCase(.lowercase)
+                                    .foregroundStyle(Color.ember.opacity(0.7))
+                            }
+                            Pill(text: row.band.label, isStrong: row.band == .strong)
+                        }
+                        .padding(.vertical, 11)
+                        .padding(.horizontal, Space.l)
                     }
                 }
+                .cardSurface(Surface.finding)
             }
+        }
+    }
+
+    private func rated(_ scores: [Dimension: Double]) -> [(dimension: Dimension, band: Band)] {
+        Dimension.allCases.compactMap { dimension in
+            scores[dimension].map { (dimension, Band(score: $0)) }
         }
     }
 
     /// The transcript is the whole record of a retelling — the audio it came from was
     /// never written anywhere.
-    @ViewBuilder
     private var transcript: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("What you said")
-                .font(.headline)
-
+        VStack(alignment: .leading, spacing: Space.md) {
+            SectionHeading(title: "What you said")
             if let text = retelling.transcriptText, !text.isEmpty {
                 Text(text)
-                    .font(.callout)
+                    .textStyle(.transcript)
+                    .foregroundStyle(Color.paper.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             } else {
                 Text("No transcript was kept for this one.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .textStyle(.secondary)
+                    .foregroundStyle(Ink.tertiary)
             }
-        }
-    }
-
-    private func labelled(_ title: String, _ body: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            Text(body).fixedSize(horizontal: false, vertical: true)
         }
     }
 }

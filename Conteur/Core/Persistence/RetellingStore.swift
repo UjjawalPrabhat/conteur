@@ -2,17 +2,7 @@ import Foundation
 import SwiftData
 
 @MainActor
-protocol RetellingStore {
-    func save(_ assessment: Assessment, attempt: Int, group: UUID, isBenchmark: Bool) throws
-    /// The speaker's own rolling average, which is what the chosen weakness is measured against.
-    func baseline() -> Baseline
-    func lastBand(for dimension: Dimension) -> Band?
-    func recent(limit: Int) -> [StoredRetelling]
-    func attempts(in group: UUID) -> [StoredRetelling]
-}
-
-@MainActor
-struct SwiftDataRetellingStore: RetellingStore {
+struct SwiftDataRetellingStore {
     /// Enough history to smooth out one unusually good or bad day, short enough that
     /// improvement still moves the baseline.
     private static let baselineWindow = 8
@@ -29,10 +19,13 @@ struct SwiftDataRetellingStore: RetellingStore {
             groupID: group,
             attempt: attempt,
             isBenchmark: isBenchmark,
+            storyTitle: assessment.comparison.story.title,
+            storyID: assessment.comparison.story.id,
             focus: assessment.focus?.rawValue,
             note: assessment.feedback?.note,
             challenge: assessment.feedback?.challenge,
             scoreData: try? JSONEncoder().encode(assessment.scores),
+            findingData: try? JSONEncoder().encode(assessment.findingSubjects),
             transcriptText: assessment.timeline.transcript.text,
             wordCount: assessment.timeline.delivery.wordCount,
             duration: assessment.timeline.duration
@@ -51,6 +44,15 @@ struct SwiftDataRetellingStore: RetellingStore {
             partial[dimension] = values.reduce(0, +) / Double(values.count)
         }
         return Baseline(scores: scores)
+    }
+
+    /// Where the fire stands across all of history. Read either side of a save so a telling
+    /// can be told it was the one that earned a level.
+    func fireStanding() -> FireStanding {
+        let descriptor = FetchDescriptor<StoredRetelling>(
+            sortBy: [SortDescriptor(\.recordedAt, order: .reverse)]
+        )
+        return FireLevel.standing(over: (try? context.fetch(descriptor)) ?? [])
     }
 
     func lastBand(for dimension: Dimension) -> Band? {

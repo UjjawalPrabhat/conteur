@@ -8,6 +8,11 @@ import FoundationModels
 struct OnDeviceComposer: FeedbackComposing {
     private static let options = GenerationOptions(sampling: .greedy)
 
+    /// Same reason as the comparison: this phrases observations about a story the app wrote
+    /// and speech the speaker just produced, and the default guardrails refuse the ones
+    /// about a bereavement.
+    private static let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+
     func compose(from diagnosis: Diagnosis, history: Band?, progress: RetellingProgress?) async -> Feedback? {
         // Nothing could be judged at all — the caller says so rather than inventing one.
         guard diagnosis.isJudgeable else { return nil }
@@ -19,10 +24,10 @@ struct OnDeviceComposer: FeedbackComposing {
         }
 
         let fallback = TemplateComposer().compose(focus, progress: progress)
-        guard case .available = SystemLanguageModel.default.availability else { return fallback }
+        guard case .available = Self.model.availability else { return fallback }
 
         do {
-            let session = LanguageModelSession(instructions: Self.instructions)
+            let session = LanguageModelSession(model: Self.model, instructions: Self.instructions)
             let draft = try await session.respond(
                 to: Self.brief(for: focus, history: history, progress: progress),
                 generating: NoteDraft.self,
@@ -57,8 +62,9 @@ struct OnDeviceComposer: FeedbackComposing {
             lines.append(contentsOf: progress.introduced.map { "- new this time: \($0.observation)" })
         }
 
-        lines.append("What they did: \(focus.dimension.rawValue)")
-        lines.append(contentsOf: focus.findings.map { "- \($0.observation)" })
+        lines.append("What went wrong with \(focus.dimension.rawValue):")
+        // Capped: handed a long list, a small model restates the list.
+        lines.append(contentsOf: focus.findings.prefix(2).map { "- \($0.observation)" })
         if let history, progress == nil {
             lines.append("Last time this was \(history.rawValue).")
         }
@@ -71,8 +77,18 @@ struct OnDeviceComposer: FeedbackComposing {
 
         Use only what you are given. Never invent a detail, a quote or a number.
 
+        Everything you are given is a fault in how they told it. The thing to do
+        differently must be to fix or stop what is listed — never to add more of it. If
+        they brought in somebody the story did not have, the fix is to leave that person
+        out, not to include them.
+
+        The story itself is fixed and cannot change. Only their telling of it can.
+
         Speak to them directly, as one person to another. Name the moment, say what it
         cost the story, and stop. Three or four sentences.
+
+        Never list the observations back. Say the one thing that cost the story most, in
+        your own words, as a person would.
 
         No score, no grade, no list, no headings. Do not open by praising them and do
         not soften the observation into a suggestion.
@@ -81,8 +97,9 @@ struct OnDeviceComposer: FeedbackComposing {
         anything else. The verdict is already decided — never contradict it, and never
         congratulate them for something the verdict does not credit.
 
-        Then give them one thing to do differently when they tell it again. Make it
-        specific to what you just described, and make it a single sentence.
+        Then give them one thing to do differently when they tell it again. One thing, not
+        several, and never "include all of this" — name the single change that would matter
+        most, in a single sentence.
         """
 }
 
@@ -133,6 +150,7 @@ private struct TemplateComposer {
         case .relevance: "Tell it again, and keep only what the story turns on."
         case .engagement: "Tell it again, and say out loud why each turn mattered."
         case .delivery: "Tell it again, and let the silences do some of the work."
+        case .fidelity: "Tell it again, and stay with the story as it was written."
         }
     }
 }

@@ -5,7 +5,7 @@ import Foundation
 struct Assessment: Sendable {
     let recordedAt: Date
     let timeline: FeatureTimeline
-    let narrative: NarrativeReading
+    let comparison: SourceComparison
     let diagnosis: Diagnosis
     let feedback: Feedback?
     /// Present only on a second telling.
@@ -18,5 +18,12 @@ struct Assessment: Sendable {
         diagnosis.assessments.reduce(into: [:]) { partial, assessment in
             partial[assessment.dimension] = assessment.score
         }
+    }
+
+    /// What went wrong, by subject rather than by sentence. Kept so history can say which
+    /// failure keeps recurring — the observations are phrased for one telling and read
+    /// oddly in aggregate, where the subject is stable.
+    var findingSubjects: [String] {
+        diagnosis.assessments.flatMap(\.findings).map(\.subject)
     }
 }

@@ -11,6 +11,7 @@ struct RuleBasedDiagnosis: Diagnosing {
     /// A story a listener cannot follow is a bigger problem than one with fillers in
     /// it, so equal score gaps do not carry equal weight.
     private static let importance: [Dimension: Double] = [
+        .fidelity: 1.1,
         .structure: 1.0,
         .coherence: 1.0,
         .relevance: 0.85,
@@ -25,15 +26,18 @@ struct RuleBasedDiagnosis: Diagnosing {
     }
 
     static let standardRules: [any DiagnosticRule] = [
-        MissingComponentsRule(),
-        DroppedThreadRule(),
-        CausalDensityRule(),
-        SequencingRule(),
+        // Need the story
+        OmittedEventRule(),
+        OmittedCharacterRule(),
+        SequenceAccuracyRule(),
+        UncausedEventRule(),
+        CompressionRule(),
+        StakesRule(),
+        InventionRule(),
+        CoverageRule(),
+        // Need only the recording
         RestartRule(),
-        TimeAllocationRule(),
-        StakesGapRule(),
         MonotoneRule(),
-        FlatClimaxRule(),
         FilledPauseRule(),
         StallRule(),
         RushedClimaxRule(),

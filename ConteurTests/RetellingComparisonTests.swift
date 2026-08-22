@@ -125,7 +125,7 @@ struct RetellingComparisonTests {
             observation: "\(entity) was introduced and never came up again",
             magnitude: 1,
             weight: 0.3,
-            evidence: [Evidence(at: 47, quote: nil, measure: nil)]
+            evidence: [.at(47)]
         )
     }
 
@@ -136,7 +136,7 @@ struct RetellingComparisonTests {
             observation: "\(Int(share * 100))% went to detail the story did not turn on",
             magnitude: share,
             weight: 0.35,
-            evidence: [Evidence(at: 0, quote: nil, measure: nil)]
+            evidence: [.at(0)]
         )
     }
 }
