@@ -7,6 +7,9 @@ import FoundationModels
 enum ModelFailure: String, LocalizedError, Sendable {
     case refused
     case contextExceeded
+    /// The device has no on-device model to ask. Not a failure of the retelling, and it has
+    /// to say so in words a tester can act on rather than in a framework's error string.
+    case unavailable
     case other
 
     init(_ error: any Error) {
@@ -42,6 +45,9 @@ enum ModelFailure: String, LocalizedError, Sendable {
         switch self {
         case .refused: "refused by the guardrail"
         case .contextExceeded: "filled the context window"
+        case .unavailable:
+            "Conteur needs Apple Intelligence, which this iPhone either doesn't support or "
+            + "hasn't finished setting up. Nothing you said was the problem."
         case .other: "failed"
         }
     }

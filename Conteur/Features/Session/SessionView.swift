@@ -155,14 +155,9 @@ struct SessionView: View {
             ScrollView {
                 VStack {
                     Spacer(minLength: 0)
-                    (Text(model.settled + (model.settled.isEmpty ? "" : " "))
-                        .foregroundStyle(Ink.settled)
-                     + Text(model.phrase)
-                        .foregroundStyle(Color(hex: 0xFFF4E6).opacity(0.95))
-                     + Text(" ▎")
-                        .foregroundStyle(Color.ember))
-                    .textStyle(.transcript)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(spoken)
+                        .textStyle(.transcript)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(minHeight: 150, alignment: .bottom)
             }
@@ -176,6 +171,19 @@ struct SessionView: View {
             .accessibilityElement()
             .accessibilityLabel(model.heard)
         }
+    }
+
+    /// Settled words behind the phrase being spoken, and a caret at the end.
+    ///
+    /// One attributed string rather than three concatenated `Text`s, which iOS 26 deprecates.
+    private var spoken: AttributedString {
+        var settled = AttributedString(model.settled.isEmpty ? "" : model.settled + " ")
+        settled.foregroundColor = Ink.settled
+        var phrase = AttributedString(model.phrase)
+        phrase.foregroundColor = Color(hex: 0xFFF4E6).opacity(0.95)
+        var caret = AttributedString(" ▎")
+        caret.foregroundColor = .ember
+        return settled + phrase + caret
     }
 
     @ViewBuilder

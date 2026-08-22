@@ -49,6 +49,9 @@ struct StoryComparison: SourceComparing {
 
     func compare(_ transcript: Transcript, with story: GuidedStory) async throws -> SourceComparison {
         guard !transcript.words.isEmpty else { return .nothing(for: story) }
+        // Asked before anything else, because every path below needs the model and the
+        // framework's own error for a missing one is not something to show a person.
+        guard case .available = Self.model.availability else { throw ModelFailure.unavailable }
 
         let entities = matcher.entities(in: transcript, from: story)
         let draft = try await coverage(of: transcript, against: story)
