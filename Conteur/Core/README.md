@@ -126,11 +126,13 @@ interjections), and restarts found as repeated 2–4 word n-grams.
 
 **`ProsodyAnalyzer.frame(from:)`** — [Signal/ProsodyAnalyzer.swift](Signal/ProsodyAnalyzer.swift)
 Autocorrelation over 70–350 Hz via `vDSP_dotpr`; correlation below `0.3` means unvoiced.
-Gives the pitch contour the transcript cannot.
+Gives the pitch contour the transcript cannot. Reported in **semitones**, not hertz: pitch is
+heard logarithmically, so a spread measured in hertz means something different for a low voice
+than for a high one.
 
 Everything lands in **`FeatureTimeline`** — [Signal/FeatureTimeline.swift](Signal/FeatureTimeline.swift) —
-which exposes `pitchVariation`, `dynamicRange`, `wordsPerMinute(in:)` and `words(in:)`
-for the rules to query.
+which exposes `pitchVariationInSemitones`, `wordsPerMinute(in:)` and `words(in:)` for the
+rules to query.
 
 ---
 
@@ -181,13 +183,13 @@ the point came through.
 
 ## Stage 4 · Diagnosis — where the findings come from
 
-No model. Twelve `DiagnosticRule` values in a collection
+No model. Fourteen `DiagnosticRule` values in a collection
 ([Diagnosis/Rules/](Diagnosis/Rules/)), so covering a new failure means adding a type, never
 editing a `switch`.
 
 ```mermaid
 flowchart TD
-    input["DiagnosticInput<br/>timeline + comparison"] --> r["13 rules"]
+    input["DiagnosticInput<br/>timeline + comparison"] --> r["14 rules"]
     r --> f["[Finding]<br/>observation · weight · evidence"]
     input --> judge{"canJudge?"}
     judge -->|no| ins["insufficient<br/><i>says nothing</i>"]
@@ -204,11 +206,16 @@ flowchart TD
 
 A dimension only speaks when there is enough to speak about — `canJudge(_:in:)`:
 
-| Dimension | Needs |
+| Rule | Needs |
 |---|---|
-| structure, relevance | ≥ 1 beat |
-| coherence, engagement | ≥ 2 beats |
-| delivery | ≥ 50 words |
+| `OmittedEventRule`, `StakesRule` | at least one beat credited |
+| `UncausedEventRule` | at least two |
+| `SequenceAccuracyRule` | at least three *placed* beats — coverage with no timestamp says nothing about order |
+| `OmittedCharacterRule`, `CompressionRule` | ≥ 30 words |
+| `InventionRule`, `CoverageRule` | ≥ 30 words **and** something recognised — finding nothing invented is only reassuring if the retelling was recognisably about this story |
+| every delivery rule, `UnevaluatedClimaxRule` | ≥ 50 words (`SpeechFloor.words`) |
+| `RushedClimaxRule`, `UnevaluatedClimaxRule` | and a *located* turning point |
+| `MonotoneRule` | any voiced audio — a short retelling can still be monotone |
 
 Otherwise the band is **`insufficient`** — *"Not enough to tell"*, never `strong`. Without
 this, a retelling too short for any rule to fire scored 1.0 everywhere and reported
@@ -224,10 +231,11 @@ of you is not simultaneously described as a strength.
 | `OmittedCharacterRule` | coherence | a central character was never named | 0.30 |
 | `SequenceAccuracyRule` | coherence | order accuracy below 0.85 | 0.30 |
 | `UncausedEventRule` | coherence | an event told without the event that caused it | 0.25 |
-| `RestartRule` | coherence | > 3 restarts | 0.20 |
+| `RestartRule` | delivery | > 3 restarts | 0.20 |
 | `CompressionRule` | relevance | skeletal (0.30) or padded (0.25) against expected recall | 0.30 / 0.25 |
 | `StakesRule` | engagement | the point of the story never came through | 0.40 |
-| `MonotoneRule` | engagement | pitch variation < 0.12 | 0.30 |
+| `MonotoneRule` | engagement | pitch spread < 2 semitones | 0.30 |
+| `UnevaluatedClimaxRule` | engagement | no evaluative device anywhere across the turning point | 0.25 |
 | `InventionRule` | fidelity | a name the story never had | 0.35 |
 | `CoverageRule` | fidelity | under half the load-bearing events told | 0.30, or 0.50 if nothing was narrated |
 | `FilledPauseRule` | delivery | filler rate > 4% (≥50 words) | 0.20 |
@@ -243,8 +251,16 @@ consults the model, which is what makes the same recording always score the same
 a story that cannot be followed is a bigger problem than one with fillers in it:
 
 ```
-structure 1.0   coherence 1.0   relevance 0.85   engagement 0.8   delivery 0.6
+fidelity 1.1   structure 1.0   coherence 1.0   relevance 0.85   engagement 0.8   delivery 0.6
 ```
+
+Fidelity outranks everything: a retelling with people in it who were never in the story is
+wrong in a way that a slow one is not.
+
+The dimension already being worked on **keeps** the focus unless another clears it by more
+than `0.1` of impact. Without that margin, three coarse bands over an eight-telling window
+move enough to hand somebody a different thing to practise every session, and no sub-skill
+survives that.
 
 The gap is measured against **your own rolling average** of the last 8 retellings
 (`SwiftDataRetellingStore.baseline()`), not against an absolute. So a coherence score
@@ -262,7 +278,7 @@ Bounded at both ends, in `SessionViewModel`:
 | **Minimum** | 40 words **and** 20 seconds | Below this there is nothing to analyse. Analysing anyway does not give weak feedback, it gives invented feedback. |
 | **Maximum** | 3 minutes | One model call per event, and a 350-word story's beat sheet plus a retelling has to fit one 4,096-token budget. |
 
-The last 60 seconds show a warning; at the cap the turn ends itself through
+The last 30 seconds show a warning; at the cap the turn ends itself through
 `endCapture()`, which stops the microphone without awaiting the session task it is called
 from. Under the minimum, the session reaches `.tooShort` and says so plainly rather than
 producing a report.
@@ -318,6 +334,17 @@ Three states rather than two, because a boolean lies about a graded thing. Paddi
 **28% → 20%** is real progress; a threshold test would render it as failure, and a
 rounding difference either side of 25% would flip the answer entirely.
 
+Each finding is compared against **its own earlier self**, never summed with another.
+Magnitudes are only meaningful inside one rule — a stall count of 4 and a pitch shortfall of
+0.02 are not the same kind of number, and adding them let the count decide the verdict on its
+own. Half the persisting findings improving is enough for *Closer*; none improving can never
+reach it.
+
+A second telling the focus dimension could not be judged on gets **no verdict at all**. A
+dimension nothing could evaluate produces no findings, which is indistinguishable from the
+problem being fixed — so "no findings" would otherwise be read as *Met* and congratulate
+somebody for something nobody measured.
+
 The verdict then leads the composer's brief, with explicit instruction never to
 contradict it. The model phrases the outcome; it does not decide it.
 
@@ -349,8 +376,8 @@ Three tiers, used consistently below:
 | **Structure** | ● | Stein & Glenn story grammar · Labov |
 | **Delivery** | ● | Speed / breakdown / repair fluency |
 | **Coherence** | ◐ | Causal network theory · entity-based coherence |
-| **Engagement** | ◐ | Labov's *evaluation* — but see the weakness below |
-| **Relevance** | ○ | Nothing. The weakest link in the system. |
+| **Engagement** | ◐ | Labov's *evaluation* — the stakes line, and the turning point |
+| **Relevance** | ○ | Length only. The weakest link in the system, and blocked on the story data. |
 
 ---
 
@@ -380,7 +407,7 @@ Labov's **abstract** and **coda** are not modelled at all.
 | `RestartRule` | Levelt, self-repair | ● |
 | `SequenceAccuracyRule` | Labov's temporal-ordering requirement | ● concordant pairs against the authored order, not an impression of it |
 
-### Relevance ◐
+### Relevance ○
 
 `CompressionRule` measures the retelling's length against what immediate recall of a story
 this length would be expected to run to — **Brysbaert's** reading rate and the recall
@@ -396,8 +423,17 @@ worth telling at all. This is the strongest research link in the codebase. The s
 `stakes` line is authored, and the model has to quote the words that carried it — a quote
 that is not in the retelling is not evidence of anything.
 
-`MonotoneRule` is **○ invented**. Prosodic expressiveness has a
-literature; we did not operationalise from it.
+`UnevaluatedClimaxRule` is the same framework applied where its absence is unambiguous: the
+turning point, checked for any of four of Labov's own evaluative categories — reported speech,
+intensifiers, comparators, explicatives — detected from surface forms with no model. It answers
+*was there any evaluation here*, never *was it good*, which is not a measurable question. **◐**:
+the categories are Labov's, the word lists are ours.
+
+`MonotoneRule` is **◐**, upgraded from invented. The threshold is still ours, but the
+measurement is no longer: pitch spread is now the standard deviation of F0 in **semitones**,
+which is the unit the prosody literature uses and the unit pitch is actually heard in. A
+coefficient of variation over raw hertz — which this was — scored the same heard
+expressiveness differently for a low voice and a high one.
 
 ### Delivery ●
 
@@ -418,22 +454,38 @@ Every numeric threshold, the importance weights, and the band boundaries.
 
 ---
 
-### Two known weaknesses
+### Known weaknesses
 
-**1 · Labov's evaluation is badly underweighted.** He treated evaluation as the thing that
-separates a story from a report, and as *distributed throughout* a narrative rather than
-located in one place. We reduce it to one authored `stakes` line per story, and
-`StakesRule` fires only when it never came through at all — so a retelling that lands the
-point once, anywhere, passes clean. The gap between how central the research considers this
-and how coarsely we measure it is the largest in the system.
+**1 · Labov's evaluation is still underweighted, though less so.** He treated evaluation as
+what separates a story from a report, and as *distributed throughout* a narrative rather than
+located in one place. `StakesRule` reduces it to one authored line per story and fires only
+when that never came through, so a retelling that lands the point once, anywhere, passes clean.
+`UnevaluatedClimaxRule` now covers the one place where absence is unambiguous — the turning
+point — which closes part of the gap. What is still unmeasured is evaluation *between* those
+two points: a telling that lands the stakes at the end and evaluates the turn, but narrates
+everything in between as a list of events, reads clean.
 
-**2 · Nothing measures which parts were worth telling.** `CompressionRule` rules on
-*length*, and the literature defines narrative importance without needing an opinion:
+**2 · Relevance rules on length, and the story data currently makes the better measure
+impossible.** The literature defines narrative importance without needing an opinion:
 **membership in the causal chain**. Events on the chain are recalled more and judged more
-important. The stories already author `causedBy` links, so which of the events a reteller
-spent their time on could be weighted by causal-chain membership — the one measurement
-that would let the app say a retelling was long in the wrong places rather than only that
-it was long.
+important, and the stories author `causedBy` links, so weighting time-on-beat by chain
+membership would let the app say a retelling was long *in the wrong places*.
+
+It cannot, yet — and the reason is the library, not the code. **Every beat in all fifteen
+stories is `loadBearing: true`, and every beat is on the causal chain**: beat 1 causes 2
+causes 3, in one unbroken line, in every story. So chain membership carries no information,
+a rule built on it can never fire, and `loadBearing` is currently a field with one value.
+This was tried and reverted rather than shipped inert.
+
+Making relevance measurable is therefore an **authoring** job first: stories need beats that
+are genuinely off the chain — the digressions, the texture, the parts a good retelling may
+compress — and `loadBearing: false` has to start meaning something. The rule is perhaps
+twenty lines once the data can distinguish anything.
+
+**3 · `strongOverlap = 3` is defended by a comment.** It is flagged in `StoryComparison` as
+the least trustworthy number in the system, and the evaluation harness that could settle it
+exists and has never been run across candidate values. Until it is, the precision–recall
+tradeoff at 2, 3 and 4 is unknown.
 
 ### References
 
@@ -456,6 +508,11 @@ comparison is worthless and trust is gone permanently. So:
 - Every finding, score, band and focus comes from **pure functions over value types**.
 - Both model passes run **`GenerationOptions(sampling: .greedy)`** — labels are reproducible too.
 - Bands, not 0–100. The measurement is not precise enough to justify two significant figures.
+- Only the dimensions that could actually be judged are **persisted**. An unjudgeable one
+  carries a score of 1 in memory as the placeholder for "no deductions taken", and a
+  placeholder that outlives its band reads back as a perfect score — which put "not enough to
+  tell" into the baseline, the tiers, the archetypes and the badges as though it were the best
+  possible answer.
 
 Verified by `theSameRetellingAlwaysDiagnosesIdentically()` in
 [../../ConteurTests/RuleBasedDiagnosisTests.swift](../../ConteurTests/RuleBasedDiagnosisTests.swift).
@@ -472,7 +529,7 @@ struct MyRule: DiagnosticRule {
     /// "not enough to tell" rather than strength — say so honestly, because a rule that
     /// could not run is not a rule that found nothing wrong.
     func canEvaluate(in input: DiagnosticInput) -> Bool {
-        input.narrative.beats.count >= 2
+        input.comparison.covered.count >= 2
     }
 
     func findings(in input: DiagnosticInput) -> [Finding] {
