@@ -33,8 +33,8 @@
 		B2062EAB302DA8CB00F4A816 /* Exceptions for "Conteur" folder in "Conteur" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Info.plist,
 				Core/README.md,
+				Info.plist,
 			);
 			target = B2062E87302DA8CA00F4A816 /* Conteur */;
 		};
@@ -99,7 +99,7 @@
 		B2062E89302DA8CA00F4A816 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				B2062E88302DA8CA00F4A816 /* Conteur: Story Teller.app */,
+				B2062E88302DA8CA00F4A816 /* Conteur.app */,
 				B2062E99302DA8CB00F4A816 /* ConteurTests.xctest */,
 				B2062EA3302DA8CB00F4A816 /* ConteurUITests.xctest */,
 			);
@@ -287,8 +287,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				INFOPLIST_KEY_CFBundleDisplayName = Conteur;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -299,6 +297,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Conteur/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Conteur;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Conteur listens while you tell your story so it can give you feedback on how you told it. Nothing is recorded — your voice is turned into text on this iPhone as you speak, and the audio is discarded.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Conteur turns your retelling into text on this iPhone so it can point to the exact moments it is giving you feedback about.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -336,8 +336,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				INFOPLIST_KEY_CFBundleDisplayName = Conteur;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -348,6 +346,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Conteur/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Conteur;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Conteur listens while you tell your story so it can give you feedback on how you told it. Nothing is recorded — your voice is turned into text on this iPhone as you speak, and the audio is discarded.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Conteur turns your retelling into text on this iPhone so it can point to the exact moments it is giving you feedback about.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;

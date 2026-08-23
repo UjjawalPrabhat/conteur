@@ -8,11 +8,15 @@ enum StoryComponent: String, Sendable, Hashable, CaseIterable, Codable {
     case attempts
     case consequences
     case resolution
-
 }
 
-/// Genre sets what a listener expects to hear back, so it replaces the shape the model
-/// used to have to infer from the retelling itself.
+/// What kind of story this is — how the library is grouped, and what the Progress tab
+/// tallies by.
+///
+/// `expectedComponents` is an authoring contract rather than a production input: no rule
+/// reads it, and `StoryLibraryTests` uses it to check that every story written for a genre
+/// actually carries the beats that genre implies. Coverage is always measured against the
+/// beats a story really has.
 enum Genre: String, Sendable, Codable, Hashable, CaseIterable {
     case folkTale
     case domestic
@@ -134,10 +138,6 @@ extension GuidedStory {
 
     var loadBearingBeats: [CanonicalBeat] {
         beats.filter(\.loadBearing)
-    }
-
-    var climax: CanonicalBeat? {
-        beats.first(where: \.isClimax)
     }
 
     var centralCast: [StoryEntity] {

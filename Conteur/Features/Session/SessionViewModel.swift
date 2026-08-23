@@ -35,10 +35,6 @@ final class SessionViewModel {
     /// Drives the listening presence. Smoothed, because the presence should breathe
     /// with the voice rather than twitch at every syllable.
     private(set) var level: Float = 0
-    /// True through a pause, when a listener would visibly hold your gaze.
-    private(set) var isAttending = false
-
-
     private(set) var elapsed: TimeInterval = 0
 
     /// What the transcriber actually heard. Shown when the retelling could not be matched,
@@ -90,7 +86,10 @@ final class SessionViewModel {
     private var transcript = Transcript.empty
     private var frames: [ProsodyFrame] = []
     private var session: Task<Void, Never>?
-    private var quietSince: TimeInterval?
+    private var clock: Task<Void, Never>?
+    /// Set when transcription failed mid-stream, so the analysis does not run over a partial
+    /// transcript and overwrite the failure with a verdict about the speaker.
+    private var didFail = false
     /// Set when the telling is walked away from, so the analysis is skipped rather than
     /// producing feedback nobody asked for.
     private var isAbandoned = false
@@ -133,6 +132,7 @@ final class SessionViewModel {
 
                 try await audio.start(convertingTo: format)
                 phase = .listening
+                startClock()
 
                 await withTaskGroup { group in
                     group.addTask { [weak self] in await self?.readTranscript(from: speech) }
@@ -157,7 +157,29 @@ final class SessionViewModel {
     /// Stops the microphone without waiting for analysis, so it is safe to call from
     /// inside the session's own task when the time limit is reached.
     private func endCapture() {
+        clock?.cancel()
+        clock = nil
         Task { await audio.stop() }
+    }
+
+    /// Drives the clock and the hard cap on their own timer rather than off the prosody
+    /// stream. Hanging both on incoming frames meant a stretch of silence froze the display,
+    /// and a prosody stream that yielded nothing at all left the cap unable to fire — so the
+    /// turn could run indefinitely past the limit that exists to protect the token budget.
+    private func startClock() {
+        clock?.cancel()
+        clock = Task { [weak self] in
+            let started = ContinuousClock.now
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled, let self else { return }
+                elapsed = started.duration(to: .now).timeInterval
+                if elapsed >= Self.maximumDuration, phase == .listening {
+                    endCapture()
+                    return
+                }
+            }
+        }
     }
 
     /// Walks away from the telling: closes the microphone and produces no feedback.
@@ -170,10 +192,6 @@ final class SessionViewModel {
         phase = .ready
     }
 
-    func silence() async {
-        await speech.stop()
-    }
-
     // MARK: - Consumers
 
     private func readTranscript(from chunks: AsyncStream<AudioChunk>) async {
@@ -182,49 +200,45 @@ final class SessionViewModel {
                 transcript = update
             }
         } catch {
-            phase = .failed(error.localizedDescription)
+            fail(error.localizedDescription)
         }
     }
 
     private func readProsody(from chunks: AsyncStream<AudioChunk>) async {
         for await frame in prosody.frames(from: chunks) {
             frames.append(frame)
-            observe(loudness: frame.loudness, at: frame.at)
+            observe(loudness: frame.loudness)
         }
     }
 
     // MARK: - Presence
 
-    /// A pause long enough to be deliberate is where a listener would settle and hold
-    /// your gaze. Shorter gaps are the rhythm of speech and should not be reacted to.
-    private static let attentionThreshold: TimeInterval = 0.4
-    private static let quietLevel: Float = 0.02
-
-    private func observe(loudness: Float, at time: TimeInterval) {
+    /// Smoothed, so the listening presence breathes with the voice rather than twitching at
+    /// every syllable. The clock and the time limit are deliberately not driven from here —
+    /// see `startClock()`.
+    private func observe(loudness: Float) {
         level += (min(loudness * 6, 1) - level) * 0.3
-        elapsed = time
-
-        if time >= Self.maximumDuration, phase == .listening {
-            endCapture()
-        }
-
-        guard loudness < Self.quietLevel else {
-            quietSince = nil
-            isAttending = false
-            return
-        }
-        let since = quietSince ?? time
-        quietSince = since
-        isAttending = time - since >= Self.attentionThreshold
     }
 
     // MARK: - Analysis
+
+    /// Records a failure so it survives the rest of the turn. The transcription consumer runs
+    /// inside the same task group as the analysis, so without this the analysis would run
+    /// afterwards regardless and overwrite the failure — reporting a broken recogniser as the
+    /// speaker not having said enough.
+    private func fail(_ reason: String) {
+        didFail = true
+        phase = .failed(reason)
+    }
 
     private func respond() async throws {
         guard !isAbandoned else {
             phase = .ready
             return
         }
+        // Transcription broke mid-stream. Whatever arrived before that is not a retelling,
+        // and analysing it would blame the speaker for the recogniser.
+        guard !didFail else { return }
 
         // Analysing a handful of words does not produce weak feedback, it produces
         // invented feedback: the model fills the summary it is asked for, and every
@@ -304,9 +318,8 @@ final class SessionViewModel {
         frames = []
         elapsed = 0
         isAbandoned = false
+        didFail = false
         assessment = nil
         level = 0
-        isAttending = false
-        quietSince = nil
     }
 }

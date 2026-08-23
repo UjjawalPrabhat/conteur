@@ -79,13 +79,14 @@ struct TellFlowView: View {
 
     private func session(_ story: GuidedStory) -> some View {
         let store = SwiftDataRetellingStore(context: context)
+        let focus = previous?.focus
 
         return SessionView(
             story: story,
             challenge: previous?.feedback?.challenge,
             attempt: attempt,
-            baseline: store.baseline(),
-            history: previous?.focus.flatMap { store.lastBand(for: $0) },
+            // Read when the telling begins, not on every pass of this body.
+            priming: { store.priming(focus: focus) },
             previous: previous?.diagnosis,
             isTelling: $isTelling,
             onAbandon: { restart() }
@@ -93,7 +94,14 @@ struct TellFlowView: View {
             // Read either side of the save: a level is earned by the telling that crossed it,
             // and saying so afterwards is the only moment it is true.
             let before = store.fireStanding().level
-            try? store.save(assessment, attempt: attempt, group: group, isBenchmark: false)
+            try? store.save(
+                assessment,
+                attempt: attempt,
+                group: group,
+                // Marked at the point it is known, so the constant-difficulty series is true
+                // from the first telling rather than from whenever the app starts asking for it.
+                isBenchmark: story.id == StoryLibrary.benchmark.id
+            )
             let after = store.fireStanding().level
             earnedLevel = after > before ? after : nil
             current = assessment

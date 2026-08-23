@@ -29,7 +29,12 @@ struct OnDeviceComposer: FeedbackComposing {
         do {
             let session = LanguageModelSession(model: Self.model, instructions: Self.instructions)
             let draft = try await session.respond(
-                to: Self.brief(for: focus, history: history, progress: progress),
+                to: Self.brief(
+                    for: focus,
+                    strength: Self.strength(in: diagnosis, excluding: focus.dimension),
+                    history: history,
+                    progress: progress
+                ),
                 generating: NoteDraft.self,
                 options: Self.options
             ).content
@@ -47,6 +52,7 @@ struct OnDeviceComposer: FeedbackComposing {
 
     private static func brief(
         for focus: DimensionAssessment,
+        strength: String?,
         history: Band?,
         progress: RetellingProgress?
     ) -> String {
@@ -68,7 +74,22 @@ struct OnDeviceComposer: FeedbackComposing {
         if let history, progress == nil {
             lines.append("Last time this was \(history.rawValue).")
         }
+        if let held = strength {
+            lines.append("What held: \(held)")
+        }
         return lines.joined(separator: "\n")
+    }
+
+    /// One dimension that held, named so the note is not purely a list of faults.
+    ///
+    /// Feedback that is only corrective measures worse than feedback that says what to keep,
+    /// and this stays inside the rule the rest of the composer follows: it is a measured band
+    /// on a dimension that was actually judged, not encouragement invented to soften the note.
+    /// Nil when nothing was strong, because there is nothing then to say.
+    private static func strength(in diagnosis: Diagnosis, excluding focus: Dimension) -> String? {
+        diagnosis.strengths
+            .first { $0.dimension != focus }
+            .map { $0.dimension.rawValue }
     }
 
     private static let instructions = """
@@ -86,6 +107,9 @@ struct OnDeviceComposer: FeedbackComposing {
 
         Speak to them directly, as one person to another. Name the moment, say what it
         cost the story, and stop. Three or four sentences.
+
+        If you are told what held, you may say so in one clause, and only as the thing that
+        did work — never as praise, never before the observation, and never instead of it.
 
         Never list the observations back. Say the one thing that cost the story most, in
         your own words, as a person would.

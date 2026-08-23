@@ -14,8 +14,14 @@ struct Assessment: Sendable {
     var focus: Dimension? { diagnosis.focus?.dimension }
 
     /// Contributes this retelling's scores to a speaker's rolling baseline.
+    ///
+    /// Only the dimensions that could actually be judged. An unjudgeable dimension carries a
+    /// score of 1 as a placeholder, and a placeholder that outlives the band it belongs to
+    /// reads back as a perfect telling — which would put "not enough to tell" into the
+    /// baseline, the tiers and the badges as though it were the best possible answer.
     var scores: [Dimension: Double] {
         diagnosis.assessments.reduce(into: [:]) { partial, assessment in
+            guard assessment.band != .insufficient else { return }
             partial[assessment.dimension] = assessment.score
         }
     }

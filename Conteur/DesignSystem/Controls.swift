@@ -166,17 +166,24 @@ struct TranscriptLine: View {
     let at: String
     let text: String
     var size: TextRole = .body
+    /// Set on the passage a finding was sent to, so the words the claim came from are picked
+    /// out of the rest of the telling rather than merely scrolled into view.
+    var isHighlighted = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Space.m) {
             Text(at)
                 .textStyle(.timestamp)
-                .foregroundStyle(Ink.quaternary)
+                .foregroundStyle(isHighlighted ? Color.ember : Ink.quaternary)
                 .frame(width: 34, alignment: .leading)
             Text(text)
                 .textStyle(size)
-                .foregroundStyle(Color.paper.opacity(0.72))
+                .foregroundStyle(isHighlighted ? Ink.primary : Color.paper.opacity(0.72))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(
+            isHighlighted ? Color.ember.opacity(0.12) : .clear,
+            in: .rect(cornerRadius: Radius.finding)
+        )
     }
 }

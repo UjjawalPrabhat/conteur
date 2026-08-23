@@ -26,6 +26,9 @@ struct ProgressReport: Sendable {
     let alreadyTrue: [Claim]
     let bestHour: Int?
     let byGenre: [GenreTally]
+    /// The fixed story, told more than once — the only comparison here where the difficulty
+    /// was held still. Nil until there are two of them to compare.
+    let benchmark: Claim?
 
     static let empty = ProgressReport(
         tellings: 0,
@@ -40,7 +43,8 @@ struct ProgressReport: Sendable {
         workOnThis: nil,
         alreadyTrue: [],
         bestHour: nil,
-        byGenre: []
+        byGenre: [],
+        benchmark: nil
     )
 }
 
@@ -105,7 +109,8 @@ extension ProgressReport {
             workOnThis: workOnThis(in: newestFirst),
             alreadyTrue: alreadyTrue(in: newestFirst),
             bestHour: bestHour(in: newestFirst),
-            byGenre: byGenre(in: newestFirst)
+            byGenre: byGenre(in: newestFirst),
+            benchmark: benchmark(in: newestFirst)
         )
     }
 
@@ -118,18 +123,12 @@ extension ProgressReport {
 
         return Dimension.allCases.map { dimension in
             guard
-                let now = mean(of: recent, dimension),
-                let before = mean(of: earlier, dimension),
+                let now = StoredRetelling.mean(of: recent, for: dimension),
+                let before = StoredRetelling.mean(of: earlier, for: dimension),
                 before > 0
             else { return DimensionDelta(dimension: dimension, change: nil) }
             return DimensionDelta(dimension: dimension, change: (now - before) / before)
         }
-    }
-
-    private static func mean(of history: [StoredRetelling], _ dimension: Dimension) -> Double? {
-        let values = history.compactMap { $0.scores[dimension] }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
     }
 
     /// The failure that keeps coming back.
@@ -147,11 +146,16 @@ extension ProgressReport {
             for family in families { counts[family, default: 0] += 1 }
         }
 
-        // The most persistent failure that has something to say. Sorted by family as well as
-        // by count so a tie resolves the same way every time rather than by dictionary order.
+        // The most persistent failure that has something to say. Family breaks a tie, so the
+        // same history always names the same failure rather than whichever the dictionary
+        // happened to yield first.
         let ranked = counts
             .filter { $0.value >= recurring && $0.key.advice != nil }
-            .sorted { ($0.value, $1.key.family) > ($1.value, $0.key.family) }
+            .sorted { lhs, rhs in
+                lhs.value == rhs.value
+                    ? lhs.key.family < rhs.key.family
+                    : lhs.value > rhs.value
+            }
         guard let (failure, count) = ranked.first, let advice = failure.advice else { return nil }
 
         return Claim(id: failure.family, statement: advice, of: count, out: window.count)
@@ -163,7 +167,7 @@ extension ProgressReport {
         let window = Array(history.prefix(claimWindow))
 
         for dimension in Dimension.allCases {
-            let strong = window.count { $0.scores[dimension].map { Band(score: $0) == .strong } == true }
+            let strong = window.count { $0.isStrong(dimension) }
             guard strong * 2 > window.count, strong >= 3 else { continue }
             claims.append(
                 Claim(
@@ -204,6 +208,31 @@ extension ProgressReport {
             statement: "Your second telling is better than your first.",
             of: better,
             out: pairs.count
+        )
+    }
+
+    /// The fixed story, then and now.
+    ///
+    /// Every other number on this screen compares tellings of different stories, so a rise
+    /// could be a better teller or an easier story. This is the one series where the story is
+    /// the same one, which is what makes it the only honest measure of getting better.
+    ///
+    /// Counted in dimensions that held rather than averaged into a score: the measurement is
+    /// banded precisely because it is not precise enough to average.
+    private static func benchmark(in history: [StoredRetelling]) -> Claim? {
+        let tellings = history.filter(\.isBenchmark)
+        guard let latest = tellings.first, let earliest = tellings.last, tellings.count >= 2
+        else { return nil }
+
+        let now = latest.strongDimensions
+        let then = earliest.strongDimensions
+        let direction = now > then ? "up from" : now < then ? "down from" : "the same as"
+
+        return Claim(
+            id: "benchmark",
+            statement: "On the fixed story, \(now) of \(Dimension.allCases.count) dimensions held — \(direction) \(then) the first time you told it.",
+            of: now,
+            out: Dimension.allCases.count
         )
     }
 
@@ -268,6 +297,7 @@ struct RecurringFailure: Hashable {
         case "invented-names": "Names appear that the story never had. Stay with the people who were in it."
         case "coverage": "Too little of the story gets told to judge the rest of it."
         case "pitch": "Your voice stays level. Let the turn sound different from the setup."
+        case "unevaluated-climax": "The turn keeps arriving flat. Say why it mattered, in the moment it happens."
         case "fillers": "Fillers keep creeping in. A pause carries better than an \"um\"."
         case "stalls": "Long silences keep landing mid-sentence rather than between them."
         case "restarts": "Sentences keep getting abandoned and restarted."

@@ -100,14 +100,21 @@ struct Sparkline: View {
 struct FoldedRow<Content: View>: View {
     let title: String
     var trailing: String?
+    /// Supply this only when something outside the row has to be able to open it — a finding
+    /// pointing at the transcript, say. Left nil, the row owns its own state, which is what
+    /// every other use wants.
+    var openness: Binding<Bool>?
     @ViewBuilder var content: () -> Content
 
-    @State private var isOpen = false
+    @State private var isOpenLocally = false
+
+    private var fold: Binding<Bool> { openness ?? $isOpenLocally }
+    private var isOpen: Bool { fold.wrappedValue }
 
     var body: some View {
         VStack(spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.25)) { isOpen.toggle() }
+                withAnimation(.easeInOut(duration: 0.25)) { fold.wrappedValue.toggle() }
             } label: {
                 HStack(spacing: Space.s) {
                     Text(title)

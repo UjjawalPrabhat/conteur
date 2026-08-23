@@ -40,7 +40,9 @@ struct RuleBasedDiagnosis: Diagnosing {
         MonotoneRule(),
         FilledPauseRule(),
         StallRule(),
+        // Need the recording and where the story turned
         RushedClimaxRule(),
+        UnevaluatedClimaxRule(),
     ]
 
     func diagnose(_ input: DiagnosticInput, against baseline: Baseline) -> Diagnosis {
@@ -89,12 +91,32 @@ struct RuleBasedDiagnosis: Diagnosing {
         )
     }
 
+    /// How much better another dimension has to be before it takes the focus from the one
+    /// already being worked on. Invented, and deliberately generous: the cost of moving too
+    /// early is a sub-skill nobody practises twice, and the cost of staying too long is one
+    /// telling spent on the second-most-useful thing.
+    private static let hysteresis = 0.1
+
     /// The dimension that has slipped furthest from where this speaker usually sits.
     /// With no history, that reduces to the weakest dimension by importance.
+    ///
+    /// The dimension already being worked on keeps it unless something clears it by a margin,
+    /// so a challenge survives a telling that did not quite land it.
     private func focus(among assessments: [DimensionAssessment], against baseline: Baseline) -> DimensionAssessment? {
-        assessments
-            .filter { !$0.findings.isEmpty }
-            .max { lhs, rhs in impact(of: lhs, against: baseline) < impact(of: rhs, against: baseline) }
+        let candidates = assessments.filter { !$0.findings.isEmpty }
+        guard
+            let leader = candidates.max(by: {
+                impact(of: $0, against: baseline) < impact(of: $1, against: baseline)
+            })
+        else { return nil }
+
+        guard
+            let standing = baseline.standingFocus,
+            let held = candidates.first(where: { $0.dimension == standing }),
+            impact(of: leader, against: baseline) - impact(of: held, against: baseline) <= Self.hysteresis
+        else { return leader }
+
+        return held
     }
 
     private func impact(of assessment: DimensionAssessment, against baseline: Baseline) -> Double {

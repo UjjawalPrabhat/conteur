@@ -26,6 +26,12 @@ final class StoredRetelling {
     var focus: String?
     var note: String?
     var challenge: String?
+    /// How the second telling went against the challenge, on the tellings that had one.
+    ///
+    /// Kept because a verdict cannot be recovered from scores: "Met" is decided by which
+    /// findings came back, and nothing else in this record says which ones did. Without it a
+    /// badge for meeting a challenge can only check that a second telling happened.
+    var verdict: String?
     /// Per-dimension scores, encoded because SwiftData cannot store a dictionary.
     var scoreData: Data?
     /// Which findings fired, by subject, encoded the same way.
@@ -51,6 +57,7 @@ final class StoredRetelling {
         focus: String? = nil,
         note: String? = nil,
         challenge: String? = nil,
+        verdict: String? = nil,
         scoreData: Data? = nil,
         findingData: Data? = nil,
         transcriptText: String? = nil,
@@ -66,6 +73,7 @@ final class StoredRetelling {
         self.focus = focus
         self.note = note
         self.challenge = challenge
+        self.verdict = verdict
         self.scoreData = scoreData
         self.findingData = findingData
         self.transcriptText = transcriptText
@@ -82,6 +90,38 @@ extension StoredRetelling {
 
     var focusDimension: Dimension? {
         focus.flatMap(Dimension.init(rawValue:))
+    }
+
+    /// A dimension's average across a stretch of tellings, over the tellings that judged it.
+    ///
+    /// Nil when none of them did, which is different from an average of zero — the baseline and
+    /// the four-week deltas both have to be able to say "no reading" rather than "no ability".
+    static func mean(of history: [StoredRetelling], for dimension: Dimension) -> Double? {
+        let values = history.compactMap { $0.scores[dimension] }
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    var challengeVerdict: ChallengeVerdict? {
+        verdict.flatMap(ChallengeVerdict.init(rawValue:))
+    }
+
+    /// The band this telling reached on one dimension, or nil where it was never judged.
+    ///
+    /// Only judged dimensions are stored, so absence means "not enough to tell" — and the one
+    /// thing it must never be read as is strength. Every count over history goes through here
+    /// rather than re-deriving `Band(score:)` at each call site.
+    func band(for dimension: Dimension) -> Band? {
+        scores[dimension].map(Band.init(score:))
+    }
+
+    func isStrong(_ dimension: Dimension) -> Bool {
+        band(for: dimension) == .strong
+    }
+
+    /// How many dimensions held. Decodes the stored scores once rather than once per dimension.
+    var strongDimensions: Int {
+        scores.values.count { Band(score: $0) == .strong }
     }
 
     /// The subjects of the findings this telling produced. Empty for a telling saved before

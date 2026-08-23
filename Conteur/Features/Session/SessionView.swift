@@ -6,8 +6,10 @@ struct SessionView: View {
     let challenge: String?
     /// Which attempt this is, so a telling too short to judge can still say where it sat.
     let attempt: Int
-    let baseline: Baseline
-    let history: Band?
+    /// Read when the telling starts rather than passed in. Both figures are database reads,
+    /// and taking them as values meant fetching twice on every body evaluation of the screen
+    /// above this one.
+    let priming: () -> Priming
     let previous: Diagnosis?
     @Binding var isTelling: Bool
     let onAbandon: () -> Void
@@ -19,8 +21,7 @@ struct SessionView: View {
         story: GuidedStory,
         challenge: String?,
         attempt: Int,
-        baseline: Baseline,
-        history: Band?,
+        priming: @escaping () -> Priming,
         previous: Diagnosis?,
         isTelling: Binding<Bool>,
         onAbandon: @escaping () -> Void,
@@ -29,8 +30,7 @@ struct SessionView: View {
         self.story = story
         self.challenge = challenge
         self.attempt = attempt
-        self.baseline = baseline
-        self.history = history
+        self.priming = priming
         self.previous = previous
         _isTelling = isTelling
         self.onAbandon = onAbandon
@@ -52,7 +52,13 @@ struct SessionView: View {
         .toolbar(.hidden, for: .navigationBar)
         .animation(.easeInOut(duration: 0.4), value: model.phase)
         .task {
-            model.prime(baseline: baseline, history: history, previous: previous, challenge: challenge)
+            let priming = priming()
+            model.prime(
+                baseline: priming.baseline,
+                history: priming.history,
+                previous: previous,
+                challenge: challenge
+            )
             // Getting to this screen — from the story, or from "tell it again" — is already
             // the decision to tell it, so there is nothing left to confirm.
             model.begin()

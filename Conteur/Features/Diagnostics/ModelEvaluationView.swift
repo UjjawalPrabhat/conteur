@@ -8,24 +8,23 @@ import SwiftUI
 struct ModelEvaluationView: View {
     @State private var model = ModelEvaluationViewModel()
 
+    /// Pushed onto the Progress tab's stack, so it must not bring one of its own.
     var body: some View {
-        NavigationStack {
-            List {
-                if let summary = model.summary {
-                    headline(summary)
-                    byShape(summary)
-                    perSample(summary)
-                } else {
-                    Section {
-                        Text("Runs \(RetellingCorpus.all.count) written-out retellings against the real model and scores its coverage against the known answer.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+        List {
+            if let summary = model.summary {
+                headline(summary)
+                byShape(summary)
+                perSample(summary)
+            } else {
+                Section {
+                    Text("Runs \(RetellingCorpus.all.count) written-out retellings against the real model and scores its coverage against the known answer.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Model evaluation")
-            .safeAreaInset(edge: .bottom) { controls }
         }
+        .navigationTitle("Model evaluation")
+        .safeAreaInset(edge: .bottom) { controls }
     }
 
     private func headline(_ summary: EvaluationSummary) -> some View {

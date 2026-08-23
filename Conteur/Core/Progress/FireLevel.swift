@@ -25,6 +25,9 @@ enum FireLevel: String, Sendable, Hashable, CaseIterable, Comparable, Codable {
     }
 
     /// What reaching this took, phrased so it can be shown as the thing still to do.
+    ///
+    /// Only ever read off a `next` level, and `unlit` is nobody's next — it is where you
+    /// start. Its case exists for exhaustiveness and is not shown anywhere.
     var requirement: String {
         switch self {
         case .unlit: "tell a story"
@@ -62,10 +65,6 @@ struct FireStanding: Sendable, Hashable {
     struct Progress: Sendable, Hashable {
         let done: Int
         let needed: Int
-
-        var fraction: Double {
-            needed > 0 ? min(1, Double(done) / Double(needed)) : 1
-        }
     }
 }
 
@@ -83,10 +82,8 @@ extension FireLevel {
             return FireStanding(level: .unlit, next: .spark, progress: nil)
         }
 
-        let engaging = history.count { ($0.scores[.engagement]).map { Band(score: $0) > .developing } == true }
-        let strongCounts = history.map { telling in
-            Dimension.allCases.count { (telling.scores[$0]).map { Band(score: $0) == .strong } == true }
-        }
+        let engaging = history.count { ($0.band(for: .engagement)).map { $0 > .developing } == true }
+        let strongCounts = history.map(\.strongDimensions)
 
         var level = FireLevel.spark
         if history.count >= kindlingTellings { level = .kindling }
