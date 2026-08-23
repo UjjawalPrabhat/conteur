@@ -6,10 +6,17 @@ import Foundation
 /// an existing install still has them sitting in Documents, and "nothing is recorded" has
 /// to be true of the device, not just of new code.
 enum RecordingCleanup {
+    /// A migration can only be needed once, so it records that it ran rather than enumerating
+    /// Documents on every launch for the rest of the app's life.
+    private static let completedKey = "RecordingCleanup.completed"
+
     /// Deliberately off the main thread and after the first frame. Enumerating the
     /// container during `App.init` sits directly on the launch path, and iOS kills an app
     /// that takes too long to show something.
-    static func removeStrandedRecordings() async {
+    static func removeStrandedRecordings(defaults: UserDefaults = .standard) async {
+        guard !defaults.bool(forKey: completedKey) else { return }
+        defaults.set(true, forKey: completedKey)
+
         await Task.detached(priority: .utility) {
             let documents = URL.documentsDirectory
             guard

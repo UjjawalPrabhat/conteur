@@ -17,3 +17,18 @@ extension Double {
         formatted(.percent.precision(.fractionLength(0)))
     }
 }
+
+extension Float {
+    /// How far a voice moved, in the unit pitch is heard in.
+    var semitoneLabel: String {
+        "\(formatted(.number.precision(.fractionLength(1)))) semitones"
+    }
+}
+
+extension Duration {
+    /// The same span as the seconds every other timing in the app is measured in.
+    var timeInterval: TimeInterval {
+        let (seconds, attoseconds) = components
+        return TimeInterval(seconds) + TimeInterval(attoseconds) / 1e18
+    }
+}

@@ -61,8 +61,18 @@ struct RetellingComparison: Sendable {
             )
         }
 
+        // The second telling has to be judgeable on the dimension the challenge targeted.
+        // A dimension nothing could evaluate produces no findings, and no findings is
+        // indistinguishable from the problem being fixed — so a retelling too sparse to look
+        // at would be credited with meeting a challenge nobody measured. No verdict is the
+        // honest answer, and the feedback screen already shows a telling without one.
+        guard
+            let retold = second.assessment(for: focus.dimension),
+            retold.band != .insufficient
+        else { return nil }
+
         let before = focus.findings
-        let after = second.assessment(for: focus.dimension)?.findings ?? []
+        let after = retold.findings
         let afterByIdentity = Dictionary(
             after.map { ($0.identity, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -87,15 +97,25 @@ struct RetellingComparison: Sendable {
 
     /// Gone is met. Still there but smaller is progress, and saying otherwise would tell
     /// somebody who improved that they failed. Still there and unchanged is not yet.
+    ///
+    /// Each finding is compared against its own earlier self and never summed with another.
+    /// Magnitudes are only meaningful within one rule — a stall count of 4 and a pitch
+    /// shortfall of 0.02 measure different things on different scales, and adding them makes
+    /// the count decide the verdict on its own.
     private func verdict(before: [Finding], persisted: [Finding]) -> ChallengeVerdict {
         guard !persisted.isEmpty else { return .met }
 
-        let was = before
-            .filter { finding in persisted.contains { $0.identity == finding.identity } }
-            .reduce(0) { $0 + $1.magnitude }
-        let now = persisted.reduce(0) { $0 + $1.magnitude }
+        let earlier = Dictionary(
+            before.map { ($0.identity, $0.magnitude) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let improved = persisted.count { finding in
+            guard let was = earlier[finding.identity], was > 0 else { return false }
+            return (was - finding.magnitude) / was >= Self.meaningfulImprovement
+        }
 
-        guard was > 0 else { return .notYet }
-        return (was - now) / was >= Self.meaningfulImprovement ? .closer : .notYet
+        // Half is enough: two problems, one of them halved, is a telling that moved. Nothing
+        // improved can never reach it, which is the only case that must not read as progress.
+        return improved * 2 >= persisted.count ? .closer : .notYet
     }
 }

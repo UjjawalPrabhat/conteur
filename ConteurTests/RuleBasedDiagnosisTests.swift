@@ -172,6 +172,39 @@ struct RuleBasedDiagnosisTests {
         #expect(coverage?.observation.contains("Aren") == true)
     }
 
+    // MARK: - Evaluation
+
+    /// Labov's evaluation: the turning point told as an event and nothing more. `StakesRule`
+    /// can pass on a closing sentence that lands the point, so the turn itself going by flat
+    /// has to be its own finding.
+    @Test func aTurningPointToldFlatIsAnEngagementFinding() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id)),
+            transcript: Fixture.transcript(words: 120, flat: true)
+        )
+
+        let finding = diagnosis.diagnose(input, against: .none)
+            .assessment(for: .engagement)?.findings.first { $0.subject == "unevaluated-climax" }
+
+        #expect(finding != nil)
+        // Evidence has to point at the turn, because that is the claim being made.
+        #expect(finding?.evidence.first?.isLocated == true)
+    }
+
+    /// One evaluative word across the turn is enough. The rule answers whether there was any
+    /// evaluation, never whether it was good — that is not measurable.
+    @Test func aTurningPointWithAnyEvaluationIsNotFlagged() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id)),
+            transcript: Fixture.transcript(words: 120)
+        )
+
+        let findings = diagnosis.diagnose(input, against: .none)
+            .assessment(for: .engagement)?.findings ?? []
+
+        #expect(findings.contains { $0.subject == "unevaluated-climax" } == false)
+    }
+
     /// With neither an event nor a character recognised, nothing can be claimed — a wrong
     /// story and a failed match look identical.
     @Test func recognisingNothingAtAllStaysUnjudged() {
@@ -272,6 +305,42 @@ struct RuleBasedDiagnosisTests {
         let baseline = Baseline(scores: [.fidelity: 0.65, .delivery: 0.95])
 
         #expect(diagnosis.diagnose(input, against: baseline).focus?.dimension == .delivery)
+    }
+
+    /// A challenge nobody gets to practise twice is not practice. The dimension already being
+    /// worked on keeps the focus through a near-tie rather than handing over a new thing to
+    /// work on every session.
+    @Test func theDimensionBeingWorkedOnKeepsTheFocusThroughANearTie() {
+        let input = Fixture.input(
+            Fixture.comparison(told: Fixture.story.beats.map(\.id), inventing: ["Alex"]),
+            transcript: Fixture.transcript(words: 120, fillers: 12)
+        )
+        let scores: [Conteur.Dimension: Double] = [.fidelity: 0.65, .delivery: 0.95]
+
+        let drifting = diagnosis.diagnose(input, against: Baseline(scores: scores))
+        let holding = diagnosis.diagnose(
+            input,
+            against: Baseline(scores: scores, standingFocus: .fidelity)
+        )
+
+        #expect(drifting.focus?.dimension == .delivery)
+        #expect(holding.focus?.dimension == .fidelity)
+    }
+
+    /// Hysteresis is a margin, not a lock. A dimension that has clearly fallen further takes
+    /// the focus regardless of what was being worked on.
+    @Test func aClearlyWorseDimensionStillTakesTheFocus() {
+        let input = Fixture.input(
+            Fixture.comparison(told: [1], mentioning: ["Aren"], conveyedStakes: false),
+            transcript: Fixture.transcript(words: 120)
+        )
+
+        let focus = diagnosis.diagnose(
+            input,
+            against: Baseline(scores: [:], standingFocus: .delivery)
+        ).focus
+
+        #expect(focus?.dimension != .delivery)
     }
 
     @Test func theSameRetellingAlwaysDiagnosesIdentically() {

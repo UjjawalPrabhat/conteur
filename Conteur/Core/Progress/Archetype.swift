@@ -63,9 +63,7 @@ extension Archetype {
         for (index, first) in Dimension.allCases.enumerated() {
             for second in Dimension.allCases[(index + 1)...] {
                 let pair = DimensionPair(first, second)
-                let met = recent.count { telling in
-                    isStrong(telling, first) && isStrong(telling, second)
-                }
+                let met = recent.count { $0.isStrong(first) && $0.isStrong(second) }
                 guard met >= required else { continue }
                 let candidate = Archetype(
                     name: named[pair] ?? derivedName(for: pair),
@@ -77,10 +75,6 @@ extension Archetype {
             }
         }
         return best
-    }
-
-    private static func isStrong(_ telling: StoredRetelling, _ dimension: Dimension) -> Bool {
-        telling.scores[dimension].map { Band(score: $0) == .strong } == true
     }
 
     private static func derivedName(for pair: DimensionPair) -> String {

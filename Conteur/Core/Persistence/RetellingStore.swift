@@ -1,6 +1,15 @@
 import Foundation
 import SwiftData
 
+/// What the last few tellings say, for the one about to start: where this speaker usually
+/// sits, and where the dimension they were challenged on stood last time.
+struct Priming: Sendable, Hashable {
+    let baseline: Baseline
+    let history: Band?
+
+    static let none = Priming(baseline: .none, history: nil)
+}
+
 @MainActor
 struct SwiftDataRetellingStore {
     /// Enough history to smooth out one unusually good or bad day, short enough that
@@ -24,6 +33,7 @@ struct SwiftDataRetellingStore {
             focus: assessment.focus?.rawValue,
             note: assessment.feedback?.note,
             challenge: assessment.feedback?.challenge,
+            verdict: assessment.progress?.verdict.rawValue,
             scoreData: try? JSONEncoder().encode(assessment.scores),
             findingData: try? JSONEncoder().encode(assessment.findingSubjects),
             transcriptText: assessment.timeline.transcript.text,
@@ -39,11 +49,12 @@ struct SwiftDataRetellingStore {
         guard !history.isEmpty else { return .none }
 
         let scores = Dimension.allCases.reduce(into: [Dimension: Double]()) { partial, dimension in
-            let values = history.compactMap { $0.scores[dimension] }
-            guard !values.isEmpty else { return }
-            partial[dimension] = values.reduce(0, +) / Double(values.count)
+            partial[dimension] = StoredRetelling.mean(of: history, for: dimension)
         }
-        return Baseline(scores: scores)
+        return Baseline(
+            scores: scores.compactMapValues { $0 },
+            standingFocus: history.first?.focusDimension
+        )
     }
 
     /// Where the fire stands across all of history. Read either side of a save so a telling
@@ -55,8 +66,19 @@ struct SwiftDataRetellingStore {
         return FireLevel.standing(over: (try? context.fetch(descriptor)) ?? [])
     }
 
+    /// What a telling needs to know about the ones before it, in one read.
+    ///
+    /// Together because they are always wanted together, and because they are database reads:
+    /// the screen that needs them is rebuilt often and must not fetch on every pass.
+    func priming(focus: Dimension?) -> Priming {
+        Priming(
+            baseline: baseline(),
+            history: focus.flatMap { lastBand(for: $0) }
+        )
+    }
+
     func lastBand(for dimension: Dimension) -> Band? {
-        recent(limit: 1).first?.scores[dimension].map(Band.init(score:))
+        recent(limit: 1).first?.band(for: dimension)
     }
 
     func recent(limit: Int) -> [StoredRetelling] {
@@ -64,14 +86,6 @@ struct SwiftDataRetellingStore {
             sortBy: [SortDescriptor(\.recordedAt, order: .reverse)]
         )
         descriptor.fetchLimit = limit
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    func attempts(in group: UUID) -> [StoredRetelling] {
-        let descriptor = FetchDescriptor<StoredRetelling>(
-            predicate: #Predicate { $0.groupID == group },
-            sortBy: [SortDescriptor(\.attempt)]
-        )
         return (try? context.fetch(descriptor)) ?? []
     }
 }

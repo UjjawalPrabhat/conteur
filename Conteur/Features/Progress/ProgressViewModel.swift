@@ -81,11 +81,6 @@ final class ProgressViewModel {
 }
 
 private extension String {
-    var capitalizedFirst: String {
-        guard let first else { return self }
-        return first.uppercased() + dropFirst()
-    }
-
     /// `FireLevel.requirement` reads "five tellings with Engagement above Developing", which
     /// is right on its own and wrong after "4 more". This drops the leading count so both
     /// phrasings can come from one string.

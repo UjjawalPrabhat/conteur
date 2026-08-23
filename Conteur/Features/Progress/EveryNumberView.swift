@@ -68,10 +68,11 @@ struct EveryNumberView: View {
                     .textStyle(.categoryLabel)
                     .foregroundStyle(Ink.quaternary)
             }
+            // Biggest mover first. Alphabetical would bury the only rows worth reading.
+            let deltas = sorted(model.report.deltas)
             VStack(spacing: 0) {
-                // Biggest mover first. Alphabetical would bury the only rows worth reading.
-                ForEach(sorted(model.report.deltas)) { delta in
-                    if delta.id != sorted(model.report.deltas).first?.id {
+                ForEach(deltas) { delta in
+                    if delta.id != deltas.first?.id {
                         Rectangle().fill(Surface.dividerQuiet).frame(height: 1)
                     }
                     DeltaRow(title: delta.dimension.title, change: delta.change)
@@ -149,8 +150,10 @@ struct EveryNumberView: View {
                 }
             }
 
-            // Branch-only tooling, kept off the tab bar but reachable: it is the only way to
-            // re-measure the comparison algorithm on device when a rule changes.
+            // Branch-only tooling: the only way to re-measure the comparison algorithm on a
+            // device when a rule changes. Debug builds only — a release reader has no use for
+            // a screen that spends a few minutes of model time to print a precision figure.
+            #if DEBUG
             FoldedRow(title: "Model evaluation", trailing: "developer") {
                 NavigationLink {
                     ModelEvaluationView()
@@ -167,6 +170,7 @@ struct EveryNumberView: View {
                 }
                 .buttonStyle(.plain)
             }
+            #endif
         }
     }
 }

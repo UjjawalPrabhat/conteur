@@ -10,11 +10,18 @@ import Foundation
 enum Fixture {
     static let story = StoryLibrary.thirdCast
 
+    /// Ordinary speech is full of evaluative words — "said", "because", "never" — so the
+    /// synthetic transcript carries some, spaced out. Without them every fixture read as a
+    /// telling with no evaluation anywhere in it, which is a real finding and not what any of
+    /// these tests are about. `flat: true` is how a test asks for one that genuinely has none.
+    private static let evaluative = ["said", "really", "because", "never"]
+
     static func transcript(
         words: Int,
         fillers: Int = 0,
         spacing: TimeInterval = 0.4,
-        stalls: Int = 0
+        stalls: Int = 0,
+        flat: Bool = false
     ) -> Transcript {
         let fillerPositions = Set(
             stride(from: 0, to: words, by: max(1, words / max(fillers, 1))).prefix(fillers)
@@ -24,7 +31,15 @@ enum Fixture {
         for index in 0..<words {
             // Stalls are inserted as long gaps early on, where they are easy to assert.
             if index > 0, index <= stalls { time += 4 }
-            let text = fillerPositions.contains(index) ? "um" : "word\(index)"
+
+            let text: String
+            if fillerPositions.contains(index) {
+                text = "um"
+            } else if !flat, index % 7 == 3 {
+                text = evaluative[(index / 7) % evaluative.count]
+            } else {
+                text = "word\(index)"
+            }
             spoken.append(SpokenWord(text: text, start: time, end: time + spacing / 2))
             time += spacing
         }

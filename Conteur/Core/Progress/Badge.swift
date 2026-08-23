@@ -34,9 +34,10 @@ extension Badge {
 
         var earned: Set<String> = ["first-fire"]
 
-        // A second telling only exists because the app asked for one, and it is only saved
-        // once the comparison produced a verdict — so its presence is the evidence.
-        if history.contains(where: { $0.attempt > 1 }) { earned.insert("held-it") }
+        // The verdict itself, not the fact of a second telling. Telling it again is not
+        // meeting the challenge, and a badge that says "you met one" has to be able to point
+        // at the telling where that was decided.
+        if history.contains(where: { $0.challengeVerdict == .met }) { earned.insert("held-it") }
 
         let nightly = history.count { calendar.component(.hour, from: $0.recordedAt) >= nightHour }
         if nightly >= owlTellings { earned.insert("night-owl") }
@@ -45,9 +46,7 @@ extension Badge {
 
         // Nothing invented and nothing left out is fidelity at its ceiling, which is the one
         // dimension where Strong genuinely means the retelling was faithful.
-        if history.contains(where: { $0.scores[.fidelity].map { Band(score: $0) == .strong } == true }) {
-            earned.insert("faithful")
-        }
+        if history.contains(where: { $0.isStrong(.fidelity) }) { earned.insert("faithful") }
 
         let genres = Set(history.compactMap(\.genre))
         if genres.count == Genre.allCases.count { earned.insert("long-way-round") }

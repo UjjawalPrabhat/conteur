@@ -7,8 +7,6 @@ struct Feedback: Sendable, Hashable {
     /// What to do differently on the next attempt.
     let challenge: String
     let evidence: [Evidence]
-
-    static let none = Feedback(dimension: .structure, note: "", challenge: "", evidence: [])
 }
 
 protocol FeedbackComposing: Sendable {

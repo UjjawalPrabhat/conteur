@@ -1,14 +1,10 @@
-//
-//  ConteurUITestsLaunchTests.swift
-//  ConteurUITests
-//
-//  Created by Ujjawal Prabhat on 13/08/26.
-//
-
 import XCTest
 
+/// Attaches a launch screenshot to the test report, per UI configuration.
+///
+/// Not an assertion — the app is a dark scene drawn in Canvas, and the thing most likely to
+/// break in it is how it looks. A screenshot in the report is how that gets noticed.
 final class ConteurUITestsLaunchTests: XCTestCase {
-
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
     }
@@ -21,11 +17,6 @@ final class ConteurUITestsLaunchTests: XCTestCase {
     func testLaunch() throws {
         let app = XCUIApplication()
         app.launch()
-
-        // Insert steps here to perform after app launch but before taking a screenshot,
-        // such as logging into a test account or navigating somewhere in the app
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
 
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Launch Screen"

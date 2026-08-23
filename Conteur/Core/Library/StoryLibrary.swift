@@ -21,6 +21,16 @@ enum StoryLibrary {
         all.first { $0.id == id }
     }
 
+    /// The one story progress is measured against at constant difficulty.
+    ///
+    /// Every other telling is of a different story, so a rising score could be a better teller
+    /// or an easier story and there is no way to tell which. Retelling one fixed story
+    /// periodically is the only comparison in the app where the difficulty is held still.
+    ///
+    /// A folk tale on purpose: the shortest beat sheet in the library, the plainest causal
+    /// chain, and the least dependent on a reader's own experience of the situation.
+    static let benchmark = FolkTales.thirdCast
+
     /// Named shortcuts, used by the test fixtures and the evaluation harness.
     static let thirdCast = FolkTales.thirdCast
     static let whatTheHouseKept = DomesticStories.whatTheHouseKept

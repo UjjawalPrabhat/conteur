@@ -96,6 +96,51 @@ struct RetellingComparisonTests {
         #expect(progress?.introduced.map(\.subject) == ["brother"])
     }
 
+    /// A second telling too sparse for the focus dimension's rules to run has no findings —
+    /// which used to be indistinguishable from the problem being fixed, so the app credited
+    /// somebody with meeting a challenge nobody was able to measure.
+    @Test func aSecondTellingThatCouldNotBeJudgedEarnsNoVerdict() {
+        let unjudgeable = DimensionAssessment(
+            dimension: .coherence,
+            band: .insufficient,
+            score: 1,
+            findings: []
+        )
+        let progress = comparison.compare(
+            diagnosis(with: [droppedThread("brother")]),
+            with: Diagnosis(
+                assessments: [
+                    unjudgeable,
+                    DimensionAssessment(dimension: .delivery, band: .strong, score: 1, findings: []),
+                ],
+                focus: nil
+            ),
+            challenge: challenge
+        )
+
+        #expect(progress == nil)
+    }
+
+    /// Two problems, one of them halved, is a telling that moved. Summing magnitudes across
+    /// findings let a count-scaled one decide the verdict for a fraction-scaled one.
+    @Test func halfTheProblemsImprovingCountsAsCloser() {
+        let progress = compare(
+            first: [padding(0.4), droppedThread("brother")],
+            second: [padding(0.2), droppedThread("brother")]
+        )
+
+        #expect(progress?.verdict == .closer)
+    }
+
+    @Test func nothingImprovingIsNeverCloser() {
+        let progress = compare(
+            first: [padding(0.4), droppedThread("brother")],
+            second: [padding(0.4), droppedThread("brother")]
+        )
+
+        #expect(progress?.verdict == .notYet)
+    }
+
     // MARK: - Fixtures
 
     private func compare(first: [Finding], second: [Finding]) -> RetellingProgress? {

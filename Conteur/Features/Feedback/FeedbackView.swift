@@ -7,6 +7,8 @@ import SwiftUI
 /// moments worth hearing without being made to read them before you can retell.
 struct FeedbackView: View {
     @State private var model: FeedbackViewModel
+    /// Owned here rather than by the row, because tapping a finding has to be able to open it.
+    @State private var isTranscriptOpen = false
     private let earnedLevel: FireLevel?
     private let onRetell: () -> Void
     private let onDone: () -> Void
@@ -24,19 +26,23 @@ struct FeedbackView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Space.screen) {
-                meta
-                headline
-                tierAward
-                next
-                folds
+        // The reader is what lets a finding send you to the words it came from. A claim you
+        // cannot go and hear is an opinion, so the transcript has to be reachable from it.
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Space.screen) {
+                    meta
+                    headline
+                    tierAward
+                    next
+                    folds(proxy)
+                }
+                .screenPadding()
+                .padding(.top, Space.l)
+                .padding(.bottom, Space.section)
             }
-            .screenPadding()
-            .padding(.top, Space.l)
-            .padding(.bottom, Space.section)
+            .scrollIndicators(.hidden)
         }
-        .scrollIndicators(.hidden)
         .background(NightBackground())
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .top) {
@@ -130,13 +136,13 @@ struct FeedbackView: View {
         }
     }
 
-    private var folds: some View {
+    private func folds(_ proxy: ScrollViewProxy) -> some View {
         VStack(spacing: Space.m) {
             if !model.located.isEmpty {
                 FoldedRow(title: "Moments worth hearing", trailing: "\(model.located.count)") {
                     VStack(spacing: Space.sm) {
                         ForEach(model.located) { item in
-                            findingCard(item)
+                            findingCard(item, proxy)
                         }
                     }
                 }
@@ -180,10 +186,18 @@ struct FeedbackView: View {
             }
 
             if !model.passages.isEmpty {
-                FoldedRow(title: "What you said", trailing: model.spokenDuration) {
+                FoldedRow(
+                    title: "What you said",
+                    trailing: model.spokenDuration,
+                    openness: $isTranscriptOpen
+                ) {
                     VStack(alignment: .leading, spacing: Space.md) {
                         ForEach(model.passages) { passage in
-                            TranscriptLine(at: passage.start.timestampLabel, text: passage.text)
+                            TranscriptLine(
+                                at: passage.start.timestampLabel,
+                                text: passage.text,
+                                isHighlighted: passage.start == model.highlighted
+                            )
                         }
                     }
                 }
@@ -193,7 +207,31 @@ struct FeedbackView: View {
 
     /// Every claim points at the words it came from. Without that the feedback is an
     /// opinion; with it, the reader can go and check.
-    private func findingCard(_ item: FeedbackViewModel.Detail) -> some View {
+    private func findingCard(_ item: FeedbackViewModel.Detail, _ proxy: ScrollViewProxy) -> some View {
+        Button {
+            reveal(item, using: proxy)
+        } label: {
+            findingBody(item)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows the words this came from")
+    }
+
+    /// Opens the transcript at the moment a finding is about. The fold has to be laid out
+    /// before it can be scrolled to, which is why the scroll waits a beat.
+    private func reveal(_ item: FeedbackViewModel.Detail, using proxy: ScrollViewProxy) {
+        guard let at = item.evidence.at else { return }
+        model.reveal(at)
+        withAnimation(.easeInOut(duration: 0.25)) { isTranscriptOpen = true }
+
+        guard let target = model.highlighted else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(120))
+            withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(target, anchor: .center) }
+        }
+    }
+
+    private func findingBody(_ item: FeedbackViewModel.Detail) -> some View {
         VStack(alignment: .leading, spacing: Space.sm) {
             HStack(spacing: Space.s) {
                 Text(item.evidence.at?.timestampLabel ?? "")
@@ -236,12 +274,5 @@ struct FeedbackView: View {
         .padding(Space.l)
         .frame(maxWidth: .infinity, alignment: .leading)
         .absenceSurface()
-    }
-}
-
-private extension String {
-    var capitalizedFirst: String {
-        guard let first else { return self }
-        return first.uppercased() + dropFirst()
     }
 }

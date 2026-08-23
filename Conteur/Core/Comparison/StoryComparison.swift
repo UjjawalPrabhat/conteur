@@ -72,11 +72,17 @@ struct StoryComparison: SourceComparing {
         // Commentary was over-credited in every run. The check is on the story's side: an
         // event that brings its own names with it did not happen in a retelling that never
         // says any of them.
-        let corroborated = claimed.filter {
-            matcher.corroborates(transcript, $0.beat, in: story)
-        }
-        let rejected = claimed.filter {
-            !matcher.corroborates(transcript, $0.beat, in: story)
+        // Ruled on once per claim, not once per outcome: the check walks the whole story's
+        // vocabulary, and asking it the same question twice to answer it both ways doubled the
+        // work of the only stage that is not waiting on the model.
+        var corroborated: [BeatCoverage] = []
+        var rejected: [BeatCoverage] = []
+        for coverage in claimed {
+            if matcher.corroborates(transcript, coverage.beat, in: story) {
+                corroborated.append(coverage)
+            } else {
+                rejected.append(coverage)
+            }
         }
 
         // The same evidence read the other way. The model denied events whose own vocabulary

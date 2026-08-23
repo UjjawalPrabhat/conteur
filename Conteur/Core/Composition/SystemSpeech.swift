@@ -2,7 +2,6 @@ import AVFoundation
 
 protocol Speaking: Sendable {
     func speak(_ text: String) async throws
-    func stop() async
 }
 
 actor SystemSpeech: Speaking {
@@ -18,10 +17,6 @@ actor SystemSpeech: Speaking {
         // reading a notification.
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
         synthesizer.speak(utterance)
-    }
-
-    func stop() {
-        synthesizer.stopSpeaking(at: .immediate)
     }
 
     /// Enhanced and premium voices are downloaded by the user in Settings, so the best

@@ -42,6 +42,7 @@ struct ProgressCoachView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             workOnThis(model)
+            benchmark(model)
             badges(model)
             alreadyTrue(model)
             everyNumber
@@ -73,6 +74,29 @@ struct ProgressCoachView: View {
                 Text(claim.statement)
                     .textStyle(.narrative)
                     .foregroundStyle(Ink.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(claim.evidence)
+                    .textStyle(.stats)
+                    .foregroundStyle(Color.moonlight)
+            }
+            .padding(Space.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardSurface()
+        }
+    }
+
+    /// The one comparison on this screen where the story was the same one both times.
+    ///
+    /// Set apart from "already true" because it is a different kind of claim: those are counts
+    /// over whatever was told, this is the same difficulty twice.
+    @ViewBuilder
+    private func benchmark(_ model: ProgressViewModel) -> some View {
+        if let claim = model.report.benchmark {
+            VStack(alignment: .leading, spacing: Space.sm) {
+                Text("The same story, twice").eyebrowStyle(.eyebrowSmall)
+                Text(claim.statement)
+                    .textStyle(.excerpt)
+                    .foregroundStyle(Color.paper.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(claim.evidence)
                     .textStyle(.stats)

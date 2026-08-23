@@ -92,6 +92,10 @@ struct Finding: Sendable, Hashable {
     let observation: String
     /// How much of the problem there is. **Lower is better**, always — so the same
     /// problem in two attempts can be told apart from the same problem unchanged.
+    ///
+    /// Comparable only against the same `identity`. Each rule picks whatever scale suits it
+    /// — a count, a shortfall, a fraction — so two findings' magnitudes must never be summed
+    /// or ranked against each other.
     let magnitude: Double
     /// How much this subtracts from the dimension's score, 0...1.
     let weight: Double
@@ -133,6 +137,13 @@ struct Diagnosis: Sendable {
 /// least for them rather than whichever dimension is hardest in general.
 struct Baseline: Sendable, Hashable {
     let scores: [Dimension: Double]
+    /// What the last telling was told to work on.
+    ///
+    /// Kept so the next telling can stay on it. Picking whichever dimension slipped furthest
+    /// each time reads as responsive and practises as noise: three coarse bands over eight
+    /// tellings move enough to hand somebody a different thing to work on every session, and
+    /// no sub-skill improves under that.
+    var standingFocus: Dimension?
 
     static let none = Baseline(scores: [:])
 

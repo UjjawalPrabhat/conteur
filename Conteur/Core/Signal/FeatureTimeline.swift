@@ -24,15 +24,23 @@ extension FeatureTimeline {
         prosody.compactMap(\.pitch)
     }
 
-    /// Coefficient of variation, so the figure is comparable between a low voice and a
-    /// high one rather than tracking absolute pitch.
-    var pitchVariation: Float {
-        let pitches = voicedPitches
-        guard pitches.count > 1 else { return 0 }
-        let mean = pitches.reduce(0, +) / Float(pitches.count)
-        guard mean > 0 else { return 0 }
-        let variance = pitches.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(pitches.count)
-        return sqrt(variance) / mean
+    /// How much the voice moved, as the standard deviation of pitch in **semitones**.
+    ///
+    /// Semitones rather than hertz because pitch is heard logarithmically: a 20 Hz move is
+    /// wide at the bottom of a low voice and inaudible at the top of a high one. A coefficient
+    /// of variation over raw hertz — which this was — divides out the mean but keeps the linear
+    /// scale, so the same heard expressiveness scored differently from voice to voice. This is
+    /// the measure the prosody literature uses, and it makes the threshold comparable across
+    /// speakers instead of only within one.
+    var pitchVariationInSemitones: Float {
+        // log2 of a non-positive pitch is undefined, and an unvoiced frame has no pitch to
+        // convert — both are already excluded, but the guard keeps that a local fact.
+        let semitones = voicedPitches.filter { $0 > 0 }.map { 12 * log2($0) }
+        guard semitones.count > 1 else { return 0 }
+
+        let mean = semitones.reduce(0, +) / Float(semitones.count)
+        let variance = semitones.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(semitones.count)
+        return sqrt(variance)
     }
 
     func wordsPerMinute(in range: Range<TimeInterval>) -> Double {

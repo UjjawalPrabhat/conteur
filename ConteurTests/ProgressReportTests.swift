@@ -106,20 +106,82 @@ struct ProgressReportTests {
         #expect(archetype?.name.isEmpty == false)
     }
 
+    // MARK: - The fixed story
+
+    /// One telling of the benchmark story compares with nothing, so there is no claim to make.
+    @Test func oneBenchmarkTellingIsNotATrend() {
+        let history = [telling(isBenchmark: true, storyID: StoryLibrary.benchmark.id)]
+
+        #expect(ProgressReport.over(history).benchmark == nil)
+    }
+
+    /// The only comparison in the app where the difficulty was held still.
+    @Test func theFixedStoryToldTwiceReportsWhatChanged() {
+        let history = [
+            telling(daysAgo: 0, isBenchmark: true, scores: [.structure: 0.9, .fidelity: 0.9]),
+            telling(daysAgo: 30, isBenchmark: true, scores: [.structure: 0.9]),
+            // A different story in between must not enter the series.
+            telling(daysAgo: 15, scores: Dimension.allCases.reduce(into: [:]) { $0[$1] = 0.9 }),
+        ]
+
+        let claim = ProgressReport.over(history).benchmark
+
+        #expect(claim?.of == 2)
+        #expect(claim?.out == Dimension.allCases.count)
+        #expect(claim?.statement.contains("up from 1") == true)
+    }
+
+    // MARK: - Not enough to tell
+
+    /// A dimension nothing could be judged on carries a score of 1 while it is in memory, as
+    /// the placeholder for "no deductions were taken". Persisting that placeholder made every
+    /// count over history read it back as a perfect score — so a telling too sparse to look at
+    /// awarded tiers, badges and archetypes it had not earned.
+    ///
+    /// `Assessment.scores` now omits unjudged dimensions, so the stored record has no entry at
+    /// all. This is the shape that arrives here, and none of it may read as strength.
+    @Test func aDimensionThatCouldNotBeJudgedIsNeverAStrength() {
+        // Delivery judged and weak; everything else absent because nothing could evaluate it.
+        let sparse = telling(scores: [.delivery: 0.4])
+
+        #expect(sparse.strongDimensions == 0)
+        #expect(Dimension.allCases.allSatisfy { !sparse.isStrong($0) })
+        #expect(sparse.band(for: .structure) == nil)
+
+        let report = ProgressReport.over(Array(repeating: sparse, count: 5))
+
+        #expect(report.standing.level == .kindling)
+        #expect(report.archetype == nil)
+        #expect(report.badges.contains { $0.id == "faithful" } == false)
+        #expect(report.alreadyTrue.isEmpty)
+    }
+
     // MARK: - Badges
 
     @Test func aFirstTellingEarnsFirstFire() {
         #expect(Badge.earned(over: [telling()]).contains { $0.id == "first-fire" })
     }
 
-    @Test func aSecondTellingEarnsHeldIt() {
+    @Test func meetingAChallengeEarnsHeldIt() {
         let group = UUID()
         let history = [
-            telling(daysAgo: 0, attempt: 2, group: group),
+            telling(daysAgo: 0, attempt: 2, group: group, verdict: .met),
             telling(daysAgo: 1, attempt: 1, group: group),
         ]
 
         #expect(Badge.earned(over: history).contains { $0.id == "held-it" })
+    }
+
+    /// The badge says the challenge was met. Telling it again is not meeting it, and the badge
+    /// would otherwise be awarded for pressing the button.
+    @Test func aSecondTellingThatMissedDoesNotEarnHeldIt() {
+        let group = UUID()
+        let history = [
+            telling(daysAgo: 0, attempt: 2, group: group, verdict: .notYet),
+            telling(daysAgo: 1, attempt: 1, group: group),
+        ]
+
+        #expect(Badge.earned(over: history).contains { $0.id == "held-it" } == false)
     }
 
     /// Three attempts at one story is persistence with a single story, not a run of three.
@@ -289,6 +351,8 @@ struct ProgressReportTests {
         daysAgo: Int = 0,
         attempt: Int = 1,
         group: UUID? = nil,
+        verdict: ChallengeVerdict? = nil,
+        isBenchmark: Bool = false,
         storyID: String? = nil,
         scores: [Conteur.Dimension: Double] = [:],
         subjects: [String] = [],
@@ -299,8 +363,10 @@ struct ProgressReportTests {
             recordedAt: Date(timeIntervalSinceNow: -Double(daysAgo) * 86_400),
             groupID: group ?? UUID(),
             attempt: attempt,
+            isBenchmark: isBenchmark,
             storyID: storyID,
             focus: Dimension.structure.rawValue,
+            verdict: verdict?.rawValue,
             scoreData: try? JSONEncoder().encode(scores),
             findingData: subjects.isEmpty ? nil : (try? JSONEncoder().encode(subjects)),
             wordCount: words,
