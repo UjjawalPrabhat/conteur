@@ -4,96 +4,124 @@ import SwiftUI
 struct HistoryView: View {
     @Query(sort: \StoredRetelling.recordedAt, order: .reverse)
     private var retellings: [StoredRetelling]
+    
+    @State private var expandedId: PersistentIdentifier? = nil
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: Space.md) {
-                    Text("Retellings")
-                        .textStyle(.largeTitle)
-                        .foregroundStyle(Ink.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, Space.m)
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack {
+                        Text("Recents")
+                            .font(.system(size: 28, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color.gray)
+                                .padding(8)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                    }
+                    .padding(.top, 24)
+                    .padding(.horizontal, 24)
 
                     if retellings.isEmpty {
                         empty
+                            .padding(.horizontal, 24)
                     } else {
-                        ForEach(Array(retellings.enumerated()), id: \.element.id) { index, retelling in
-                            NavigationLink {
-                                RetellingDetailView(retelling: retelling)
-                            } label: {
-                                // The most recent telling sits slightly forward of the rest.
-                                card(retelling, isLatest: index == 0)
+                        VStack(spacing: 0) {
+                            ForEach(retellings) { retelling in
+                                historyRow(retelling)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 24)
                     }
                 }
-                .screenPadding()
-                .padding(.top, Space.section)
-                .padding(.bottom, Space.section)
+                .padding(.bottom, 40)
             }
-            .scrollIndicators(.hidden)
-            .background(NightBackground())
+            .background(Color(hex: 0x0A1024))
             .toolbar(.hidden, for: .navigationBar)
         }
     }
 
     private var empty: some View {
-        VStack(alignment: .leading, spacing: Space.s) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Nothing yet")
-                .textStyle(.sectionHeading)
-                .foregroundStyle(Ink.primary)
+                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
             Text("Your retellings will collect here.")
-                .textStyle(.body)
-                .foregroundStyle(Ink.secondary)
+                .font(.system(size: 14, design: .monospaced))
+                .foregroundStyle(.gray)
         }
-        .padding(.top, Space.xl)
     }
 
-    private func card(_ retelling: StoredRetelling, isLatest: Bool) -> some View {
-        VStack(alignment: .leading, spacing: Space.m) {
-            HStack(alignment: .top) {
-                Text(retelling.recordedAt, format: .dateTime.day().month().hour().minute())
-                    .textStyle(.meta)
-                    .foregroundStyle(Ink.tertiary)
-                Spacer()
-                if retelling.attempt > 1 {
-                    Text("second telling")
-                        .textStyle(.pillLabel)
-                        .foregroundStyle(Color.emberLight)
-                        .padding(.horizontal, Space.s)
-                        .padding(.vertical, 3)
-                        .background(Surface.emberPill, in: .rect(cornerRadius: Radius.pill))
+    private func historyRow(_ retelling: StoredRetelling) -> some View {
+        let isExpanded = expandedId == retelling.id
+        
+        return VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    if expandedId == retelling.id {
+                        expandedId = nil
+                    } else {
+                        expandedId = retelling.id
+                    }
+                }
+            } label: {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Text(retelling.storyTitle ?? "A story")
+                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                            
+                            let tellingText = retelling.attempt > 1 ? "Second Telling" : "First Telling"
+                            Text(tellingText)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.black)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.9))
+                                .clipShape(Capsule())
+                        }
+                        
+                        Text(retelling.recordedAt.formatted(.dateTime.month(.abbreviated).day().year()))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.gray)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .foregroundStyle(.white)
+                        .rotationEffect(.degrees(isExpanded ? -180 : 0))
                 }
             }
-
-            VStack(alignment: .leading, spacing: Space.xs) {
-                Text(retelling.storyTitle ?? "A story")
-                    .textStyle(.rowTitle)
-                    .foregroundStyle(Ink.primary)
-                if let focus = retelling.focusDimension {
-                    Text("Focus · \(focus.title)")
-                        .textStyle(.categoryLabel)
-                        .textCase(.uppercase)
-                        .foregroundStyle(Ink.tertiary)
+            .buttonStyle(.plain)
+            
+            if isExpanded, let note = retelling.note {
+                NavigationLink {
+                    RetellingDetailView(retelling: retelling)
+                } label: {
+                    Text(note)
+                        .font(.system(size: 14, design: .monospaced))
+                        .foregroundStyle(Color.gray)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
                 }
+                .buttonStyle(.plain)
             }
-
-            if let note = retelling.note {
-                Text(note)
-                    .textStyle(.excerpt)
-                    .foregroundStyle(Color.paper.opacity(0.62))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
-
-            Text("\(retelling.wordCount) words · \(retelling.duration.secondsLabel)")
-                .textStyle(.stats)
-                .foregroundStyle(Ink.quaternary)
+            
+            Rectangle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(height: 1)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
         }
-        .padding(Space.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface(isLatest ? Surface.card : Surface.cardQuiet)
     }
 }
