@@ -134,18 +134,9 @@ struct SessionView: View {
     private var action: some View {
         switch model.phase {
         case .ready, .failed, .tooShort, .preparing, .reading:
-            Button(action: {
+            HoldStartButton(onComplete: {
                 model.begin()
-            }) {
-                ZStack {
-                    Circle()
-                        .stroke(Color(red: 0.98, green: 0.95, blue: 0.85), lineWidth: 4)
-                    Circle()
-                        .fill(Color(red: 0.38, green: 0.22, blue: 0.16))
-                        .padding(6)
-                }
-                .frame(width: 72, height: 72)
-            }
+            })
         case .listening:
             Button(action: {
                 Task { await model.end() }
@@ -475,5 +466,57 @@ class SessionScene: SKScene {
             darkGround.run(SKAction.fadeIn(withDuration: duration))
             litGround.run(SKAction.fadeOut(withDuration: duration))
         }
+    }
+}
+
+
+struct HoldStartButton: View {
+    let onComplete: () -> Void
+    @State private var isHolding = false
+    @State private var progress: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color(red: 0.98, green: 0.95, blue: 0.85), lineWidth: 4)
+            
+            Circle()
+                .fill(Color(red: 0.38, green: 0.22, blue: 0.16))
+                .padding(6)
+            
+            // Fill animation while holding
+            Circle()
+                .fill(Color.orange.opacity(0.8))
+                .padding(6)
+                .scaleEffect(progress)
+                .opacity(progress)
+        }
+        .frame(width: 72, height: 72)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isHolding {
+                        isHolding = true
+                        withAnimation(.easeInOut(duration: 0.8)) {
+                            progress = 1.0
+                        }
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(800))
+                            if isHolding {
+                                isHolding = false
+                                onComplete()
+                            }
+                        }
+                    }
+                }
+                .onEnded { _ in
+                    if isHolding {
+                        isHolding = false
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            progress = 0
+                        }
+                    }
+                }
+        )
     }
 }
