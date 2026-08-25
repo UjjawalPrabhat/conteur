@@ -39,7 +39,7 @@ struct TellFlowView: View {
         }
         // The tab bar is a distraction while somebody is mid-story, so it goes away for
         // the telling and comes back afterwards.
-        .toolbar(isTelling ? .hidden : .automatic, for: .tabBar)
+        .toolbar((stage == .reading || stage == .telling) ? .hidden : .automatic, for: .tabBar)
     }
 
     @ViewBuilder

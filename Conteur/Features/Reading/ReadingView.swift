@@ -1,63 +1,157 @@
 import SwiftUI
 
-/// The story, to read once.
-///
-/// It goes away before the retelling starts and does not come back. Retelling from memory
-/// is the paradigm the recall research is built on, and it is also the only version that
-/// resembles talking about something you actually read.
 struct ReadingView: View {
     let story: GuidedStory
     let onBack: () -> Void
     let onFinished: () -> Void
 
+    @State private var hasScrolled = false
+    @State private var hasReachedBottom = false
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Space.xl) {
-                    header
-                    Callout(text: "Read it once. It won't be here afterwards.")
-                    prose
-                }
-                .screenPadding()
-                .padding(.top, Space.l)
-                // Room for the scrim and the button, so the last paragraph is never
-                // trapped underneath them.
-                .padding(.bottom, 150)
-            }
-            .scrollIndicators(.hidden)
+            // Background
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 37/255, green: 73/255, blue: 136/255),
+                    Color(red: 35/255, green: 38/255, blue: 65/255)
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-            closing
-        }
-        .background(NightBackground())
-        .toolbar(.hidden, for: .navigationBar)
-        .safeAreaInset(edge: .top) {
-            HStack {
-                BackButton(title: "Stories", action: onBack)
-                Spacer()
+            StarsView()
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Top Bar
+                VStack(spacing: 8) {
+                    ZStack {
+                        Text(" ")
+                            .font(.system(size: 16, design: .monospaced))
+                        
+                        if hasScrolled {
+                            Text(story.title)
+                                .font(.system(size: 16, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .transition(.opacity)
+                        }
+                    }
+                    
+                    HStack {
+                        Button(action: onBack) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("Pick a story")
+                                    .font(.system(size: 16, design: .monospaced))
+                            }
+                            .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                        }
+                        Spacer()
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, 16)
+                // We add a subtle gradient to the top bar so stars show through but text doesn't clash
+                // Actually, if we use VStack, the scrollview clips exactly at the bottom of this bar!
+                // So we don't need a background on the top bar to hide the text, the layout clips it automatically.
+
+                // ScrollView
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 32) {
+                        header
+                        prose
+                        
+                        GeometryReader { proxy in
+                            Color.clear
+                                .preference(key: ScrollBottomKey.self, value: proxy.frame(in: .global).minY)
+                        }
+                        .frame(height: 1)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .padding(.bottom, 150)
+                }
+                .scrollIndicators(.hidden)
             }
-            .screenPadding()
-            .padding(.bottom, Space.s)
+
+            // Pinned button at bottom
+            VStack {
+                Spacer()
+                Button(action: onFinished) {
+                    Text("Start Storytelling")
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(red: 237/255, green: 127/255, blue: 51/255))
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+                .background(
+                    LinearGradient(
+                        colors: [.clear, Color(red: 35/255, green: 38/255, blue: 65/255).opacity(0.9)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 120)
+                    .offset(y: 20)
+                )
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .opacity(hasReachedBottom ? 1 : 0)
+            .animation(.easeInOut(duration: 0.3), value: hasReachedBottom)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .onPreferenceChange(ScrollBottomKey.self) { minY in
+            let screenHeight = UIScreen.main.bounds.height
+            if minY < screenHeight + 50 {
+                hasReachedBottom = true
+            }
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: Space.sm) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(story.title)
-                .textStyle(.storyTitle)
-                .foregroundStyle(Ink.primary)
-            Text("\(story.genre.label) · about \(Int(story.readingTime.rounded())) seconds to read")
-                .textStyle(.meta)
-                .foregroundStyle(Ink.tertiary)
+                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+            
+            let words = story.prose.components(separatedBy: .whitespacesAndNewlines).count
+            let seconds = Int(story.readingTime.rounded())
+            Text("\(words) words (\(seconds) seconds)")
+                .font(.system(size: 16, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.8))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .opacity(hasScrolled ? 0 : 1)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.onChange(of: proxy.frame(in: .global).minY) { _, minY in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        // 80 is roughly the height of the top safe area + top bar
+                        hasScrolled = minY < 80
+                    }
+                }
+            }
+        )
     }
 
     private var prose: some View {
-        VStack(alignment: .leading, spacing: Space.l) {
+        VStack(alignment: .leading, spacing: 24) {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
                 Text(paragraph)
-                    .textStyle(.storyBody)
-                    .foregroundStyle(Ink.primary)
+                    .font(.system(size: 18, design: .monospaced))
+                    .lineSpacing(4)
+                    .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -69,36 +163,12 @@ struct ReadingView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
     }
+}
 
-    /// Always available. Gating it on having scrolled to the end measured whether the text
-    /// had been on screen, not whether it had been read, and left anybody who skims stuck on
-    /// a screen with no way forward.
-    private var closing: some View {
-        VStack(spacing: Space.m) {
-            Text("That's the whole story. It won't be here once you begin.")
-                .textStyle(.secondary)
-                .foregroundStyle(Ink.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            IgniteControl(onIgnite: onFinished)
-            Text("press and hold")
-                .textStyle(.categoryLabel)
-                .foregroundStyle(Ink.quaternary)
-        }
-        .screenPadding()
-        .padding(.bottom, Space.s)
-        .padding(.top, Space.section)
-        .background {
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: Color.nightDeep.opacity(0.94), location: 0.34),
-                    .init(color: Color.nightDeep.opacity(0.94), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
+
+struct ScrollBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
