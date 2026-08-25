@@ -1,4 +1,5 @@
 import SwiftUI
+import SpriteKit
 
 /// The telling. A fire, the words as they arrive, and one way to stop.
 struct SessionView: View {
@@ -17,6 +18,12 @@ struct SessionView: View {
 
     @State private var model: SessionViewModel
 
+
+    @State private var sessionScene: SessionScene = {
+        let scene = SessionScene(size: CGSize(width: 604, height: 1136))
+        scene.scaleMode = .aspectFill
+        return scene
+    }()
     init(
         story: GuidedStory,
         challenge: String?,
@@ -40,18 +47,35 @@ struct SessionView: View {
 
     var body: some View {
         ZStack {
+            // Background
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 37/255, green: 73/255, blue: 136/255),
+                    Color(red: 35/255, green: 38/255, blue: 65/255)
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            StarsView()
+                .ignoresSafeArea()
+
+            SpriteView(scene: sessionScene, options: [.allowsTransparency])
+                .ignoresSafeArea()
+
             if isUnusable {
-                NightBackground()
                 notEnough
             } else {
-                // A second telling sits closer to the fire: same night, later hour.
-                CampfireScene(isClose: challenge != nil)
                 fireside
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
         .animation(.easeInOut(duration: 0.4), value: model.phase)
         .task {
+            isTelling = true
             let priming = priming()
             model.prime(
                 baseline: priming.baseline,
@@ -59,159 +83,96 @@ struct SessionView: View {
                 previous: previous,
                 challenge: challenge
             )
-            // Getting to this screen — from the story, or from "tell it again" — is already
-            // the decision to tell it, so there is nothing left to confirm.
-            model.begin()
+            // Removed model.begin() to start in .ready state
         }
         .onChange(of: model.phase) { _, phase in
-            isTelling = phase == .listening || phase == .reading
+            isTelling = true
+            sessionScene.setLit(shouldBeLit)
             if phase == .responding, let assessment = model.assessment {
                 onFinish(assessment)
             }
         }
     }
-
-    // MARK: - At the fire
-
+    
     private var fireside: some View {
         VStack(spacing: 0) {
-            topBar
-            Spacer(minLength: Space.xl)
-
-            Text(invitation)
-                .textStyle(.prompt)
-                .foregroundStyle(Color.paper.opacity(0.82))
-                .multilineTextAlignment(.center)
-                .shadow(color: .black.opacity(0.7), radius: 9, y: 2)
-                .padding(.horizontal, Space.xxl)
-
-            if let challenge, model.isListening {
-                challengeCard(challenge)
-                    .padding(.top, Space.xl)
-                    .padding(.horizontal, Space.screen)
-            }
-
-            Spacer(minLength: Space.l)
-
-            if model.isRunningOut {
-                Callout(
-                    text: "About \(Int(model.remaining.rounded())) seconds left — start drawing it to a close.",
-                    isWarning: true
-                )
-                .screenPadding()
-                .padding(.bottom, Space.md)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-
-            transcript
-            action
-                .screenPadding()
-                .padding(.top, Space.lg)
-                .padding(.bottom, Space.xl)
-        }
-    }
-
-    private var topBar: some View {
-        HStack {
-            if model.phase != .responding {
-                BackButton(title: "Stories", tint: Ink.tertiary) {
-                    Task {
-                        await model.cancel()
-                        onAbandon()
-                    }
-                }
-            }
             Spacer()
-            Text(clock)
-                .textStyle(.timer)
-                .monospacedDigit()
-                .foregroundStyle(model.isRunningOut ? Color.ember : Ink.tertiary)
+            
+            if model.phase == .ready || model.phase == .preparing {
+                Text("Start\nstorytelling")
+                    // We'll use VT323 or Courier to look pixelated. Actually, the mockup uses a pixel font.
+                    .font(.system(size: 32, weight: .bold, design: .monospaced))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
+                    .padding(.bottom, 80)
+            } else if model.phase == .listening || model.phase == .reading {
+                VStack(spacing: 8) {
+                    Text(clock)
+                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                    Text("\(model.spokenWords) words")
+                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                }
+                .padding(.bottom, 80)
+            }
+            
+            Spacer()
+            Spacer()
+            Spacer()
+            
+            action
+                .padding(.bottom, 60)
         }
-        .screenPadding()
-        .padding(.top, Space.s)
     }
 
-    /// Counting up while there is room, and down once there is not. The switch is the
-    /// warning — a number falling reads as a limit in a way an elapsed time never does.
     private var clock: String {
         (model.isRunningOut ? model.remaining : model.elapsed).timestampLabel
-    }
-
-    private func challengeCard(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: Space.xs) {
-            Text("Your challenge").eyebrowStyle(.eyebrowSmall, color: Color.ember.opacity(0.85))
-            Text(text)
-                .textStyle(.body)
-                .foregroundStyle(Color(hex: 0xFAF0E4).opacity(0.88))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Space.md)
-        .background(.ultraThinMaterial.opacity(0.5), in: .rect(cornerRadius: Radius.callout))
-        .background(Color(hex: 0x100A06).opacity(0.55), in: .rect(cornerRadius: Radius.callout))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.callout)
-                .strokeBorder(Color(hex: 0xFFC896).opacity(0.16), lineWidth: 1)
-        }
-    }
-
-    /// Bottom-anchored, so the newest words sit where the eye already is.
-    @ViewBuilder
-    private var transcript: some View {
-        if model.isListening, !model.heard.isEmpty {
-            ScrollView {
-                VStack {
-                    Spacer(minLength: 0)
-                    Text(spoken)
-                        .textStyle(.transcript)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: 150, alignment: .bottom)
-            }
-            .frame(height: 150)
-            .scrollIndicators(.hidden)
-            .defaultScrollAnchor(.bottom)
-            .shadow(color: .black.opacity(0.85), radius: 8, y: 2)
-            .screenPadding()
-            // Read as one running sentence. The caret is a drawn cursor, and spelling it
-            // out mid-sentence is worse than leaving it out.
-            .accessibilityElement()
-            .accessibilityLabel(model.heard)
-        }
-    }
-
-    /// Settled words behind the phrase being spoken, and a caret at the end.
-    ///
-    /// One attributed string rather than three concatenated `Text`s, which iOS 26 deprecates.
-    private var spoken: AttributedString {
-        var settled = AttributedString(model.settled.isEmpty ? "" : model.settled + " ")
-        settled.foregroundColor = Ink.settled
-        var phrase = AttributedString(model.phrase)
-        phrase.foregroundColor = Color(hex: 0xFFF4E6).opacity(0.95)
-        var caret = AttributedString(" ▎")
-        caret.foregroundColor = .ember
-        return settled + phrase + caret
     }
 
     @ViewBuilder
     private var action: some View {
         switch model.phase {
-        case .listening:
-            Button("That's it") {
-                Task { await model.end() }
+        case .ready, .failed, .tooShort, .preparing, .reading:
+            Button(action: {
+                model.begin()
+            }) {
+                ZStack {
+                    Circle()
+                        .stroke(Color(red: 0.98, green: 0.95, blue: 0.85), lineWidth: 4)
+                    Circle()
+                        .fill(Color(red: 0.38, green: 0.22, blue: 0.16))
+                        .padding(6)
+                }
+                .frame(width: 72, height: 72)
             }
-            .buttonStyle(FiresideButtonStyle())
-        case .ready, .preparing, .reading:
-            // The wait stays at the fire. A spinner on a blank screen would end the scene
-            // at exactly the moment the app is deciding what to say about it.
-            ProgressView()
-                .tint(Color.ember)
-                .frame(height: 54)
-        case .responding, .failed, .tooShort, .unmatched:
+        case .listening:
+            Button(action: {
+                Task { await model.end() }
+            }) {
+                ZStack {
+                    Circle()
+                        .stroke(Color(red: 0.98, green: 0.95, blue: 0.85), lineWidth: 4)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(red: 0.38, green: 0.22, blue: 0.16))
+                        .frame(width: 28, height: 28)
+                }
+                .frame(width: 72, height: 72)
+            }
+        case .responding, .unmatched:
             EmptyView()
         }
     }
 
     // MARK: - Nothing to judge
+
+
+    private var shouldBeLit: Bool {
+        switch model.phase {
+        case .ready, .tooShort, .unmatched, .preparing, .failed: return false
+        default: return true
+        }
+    }
 
     private var isUnusable: Bool {
         switch model.phase {
@@ -225,7 +186,6 @@ struct SessionView: View {
     private var notEnough: some View {
         VStack(spacing: Space.xl) {
             Spacer()
-            DimmedEmber()
 
             VStack(spacing: Space.m) {
                 Text(tally)
@@ -303,6 +263,217 @@ struct SessionView: View {
         case .unmatched:
             "I heard you, but I couldn't line any of it up with \"\(story.title)\"."
         case .failed(let message): message
+        }
+    }
+}
+
+private struct Star: Identifiable {
+    let id: Int
+    let x: CGFloat
+    let y: CGFloat
+    let size: CGFloat
+    let baseOpacity: Double
+    let twinkleDuration: Double
+    let twinkleDelay: Double
+}
+
+private let seededStars: [Star] = {
+    var stars: [Star] = []
+    var seed: UInt64 = 0xDEAD_BEEF_1234_5678
+    func nextDouble() -> Double {
+        seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        return Double(seed >> 33) / Double(UInt64(1) << 31)
+    }
+    for i in 0..<150 {
+        stars.append(Star(
+            id: i,
+            x: nextDouble(),
+            y: nextDouble() * 0.8,
+            size: 1.5 + nextDouble() * 1.3,
+            baseOpacity: 0.5 + nextDouble() * 0.5,
+            twinkleDuration: 1.5 + nextDouble() * 2.5,
+            twinkleDelay: nextDouble() * 3.0
+        ))
+    }
+    return stars
+}()
+
+private struct TwinklingStar: View {
+    let star: Star
+    @State private var bright = false
+
+    var body: some View {
+        GeometryReader { geo in
+            Circle()
+                .fill(Color.white.opacity(bright ? star.baseOpacity : star.baseOpacity * 0.4))
+                .frame(width: star.size, height: star.size)
+                .position(
+                    x: star.x * geo.size.width,
+                    y: star.y * geo.size.height
+                )
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + star.twinkleDelay) {
+                withAnimation(
+                    .easeInOut(duration: star.twinkleDuration)
+                    .repeatForever(autoreverses: true)
+                ) {
+                    bright = true
+                }
+            }
+        }
+    }
+}
+
+struct StarsView: View {
+    var body: some View {
+        GeometryReader { _ in
+            ZStack {
+                ForEach(seededStars) { star in
+                    TwinklingStar(star: star)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+class SessionScene: SKScene {
+    
+    private var fireNode: SKSpriteNode!
+    private var cloudsLeft: [SKSpriteNode] = []
+    private var cloudsRight: [SKSpriteNode] = []
+    private var litGround: SKSpriteNode!
+    private var darkGround: SKSpriteNode!
+    private var litRocks: [SKSpriteNode] = []
+    private var darkRocks: [SKSpriteNode] = []
+    
+    override func didMove(to view: SKView) {
+        self.backgroundColor = .clear
+        self.anchorPoint = CGPoint(x: 0.5, y: 0.0)
+        
+        let cloud1 = SKSpriteNode(imageNamed: "cloud_01")
+        cloud1.position = CGPoint(x: -150, y: 535)
+        cloud1.setScale(0.75)
+        cloud1.zPosition = 1.1
+        addChild(cloud1)
+        let cloudBack1 = SKSpriteNode(imageNamed: "cloud_back_01")
+        cloudBack1.position = CGPoint(x: -200, y: 630)
+        cloudBack1.setScale(0.75)
+        cloudBack1.zPosition = 1
+        addChild(cloudBack1)
+        
+        cloudsLeft.append(cloud1)
+        cloudsLeft.append(cloudBack1)
+        
+        let cloud2 = SKSpriteNode(imageNamed: "cloud_02")
+        cloud2.position = CGPoint(x: 130, y: 535)
+        cloud2.setScale(0.75)
+        cloud2.zPosition = 1.1
+        addChild(cloud2)
+        
+        let cloudBack2 = SKSpriteNode(imageNamed: "cloud_back_02")
+        cloudBack2.position = CGPoint(x: 160, y: 635)
+        cloudBack2.setScale(0.75)
+        cloudBack2.zPosition = 1
+        addChild(cloudBack2)
+        
+        cloudsRight.append(cloud2)
+        cloudsRight.append(cloudBack2)
+        
+        let outerGround = SKSpriteNode(imageNamed: "outer_ground")
+        outerGround.position = CGPoint(x: 0, y: 220)
+        outerGround.zPosition = 2
+        addChild(outerGround)
+        
+        
+        darkGround = SKSpriteNode(imageNamed: "ground_dark")
+        darkGround.position = CGPoint(x: 0, y: 282)
+        darkGround.zPosition = 3.1
+        addChild(darkGround)
+        
+        litGround = SKSpriteNode(imageNamed: "ground")
+        litGround.position = CGPoint(x: 0, y: 282)
+        litGround.zPosition = 3
+        addChild(litGround)
+        
+        
+        // Helper to add rock pairs
+        func addRock(name: String, unlitName: String, pos: CGPoint, z: CGFloat) {
+            let dark = SKSpriteNode(imageNamed: unlitName)
+            dark.position = pos
+            dark.setScale(0.75)
+            dark.zPosition = z
+            dark.alpha = 1.0
+            addChild(dark)
+            darkRocks.append(dark)
+            
+            let lit = SKSpriteNode(imageNamed: name)
+            lit.position = pos
+            lit.setScale(0.75)
+            lit.zPosition = z + 0.1
+            lit.alpha = 0.0
+            addChild(lit)
+            litRocks.append(lit)
+        }
+        
+        
+        addRock(name: "rock_01", unlitName: "dark_rock_01", pos: CGPoint(x: -140, y: 274), z: 4.0)
+        addRock(name: "rock_02", unlitName: "dark_rock_02", pos: CGPoint(x: -60, y: 250), z: 7.0)
+        addRock(name: "rock_03", unlitName: "dark_rock_03", pos: CGPoint(x: 70, y: 260), z: 6.0)
+        addRock(name: "rock_04", unlitName: "dark_rock_04", pos: CGPoint(x: 180, y: 280), z: 7.0)
+        
+        // Fire
+        var fireTextures: [SKTexture] = []
+        for i in 1...12 {
+            let name = String(format: "campfire_%02d", i)
+            fireTextures.append(SKTexture(imageNamed: name))
+        }
+        fireNode = SKSpriteNode(texture: fireTextures[0])
+        fireNode.position = CGPoint(x: 0, y: 550)
+        fireNode.setScale(1.1)
+        fireNode.zPosition = 5
+        fireNode.run(SKAction.repeatForever(SKAction.animate(with: fireTextures, timePerFrame: 0.15)))
+        fireNode.alpha = 0.0
+        addChild(fireNode)
+        
+        // Grass
+        let grass01 = SKSpriteNode(imageNamed: "grass_01")
+        grass01.position = CGPoint(x: -170, y: 185)
+        grass01.zPosition = 7
+        addChild(grass01)
+        
+        let grass02 = SKSpriteNode(imageNamed: "grass_02")
+        grass02.position = CGPoint(x: 200, y: 155)
+        grass02.zPosition = 7
+        addChild(grass02)
+    }
+    
+    func setLit(_ isLit: Bool) {
+        let duration = 0.8
+        if isLit {
+            fireNode.run(SKAction.fadeIn(withDuration: duration))
+            for dark in darkRocks { dark.run(SKAction.fadeOut(withDuration: duration)) }
+            for lit in litRocks { lit.run(SKAction.fadeIn(withDuration: duration)) }
+            
+            darkGround.run(SKAction.fadeOut(withDuration: duration))
+            
+            litGround.run(SKAction.fadeIn(withDuration: duration))
+            
+            for cloud in cloudsLeft {
+                cloud.run(SKAction.moveTo(x: -1000, duration: duration * 2.3))
+            }
+            for cloud in cloudsRight {
+                cloud.run(SKAction.moveTo(x: 1000, duration: duration * 2.3))
+            }
+            
+        } else {
+            fireNode.run(SKAction.fadeOut(withDuration: duration))
+            for dark in darkRocks { dark.run(SKAction.fadeIn(withDuration: duration)) }
+            for lit in litRocks { lit.run(SKAction.fadeOut(withDuration: duration)) }
+            
+            darkGround.run(SKAction.fadeIn(withDuration: duration))
+            litGround.run(SKAction.fadeOut(withDuration: duration))
         }
     }
 }
