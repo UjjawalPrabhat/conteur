@@ -33,30 +33,30 @@ struct TellFlowView: View {
     var body: some View {
         NavigationStack {
             ZStack {
+                StarsBackgroundView()
+
                 content
                     // The feedback fades in rather than sliding. A push reads as going somewhere
                     // else; this is the fire answering, and it should arrive where you are.
                     .animation(.easeInOut(duration: 0.35), value: stage)
                     .transition(.opacity)
-                
+            }
+            .overlay(alignment: .topLeading) {
                 if stage == .choosing {
-                    VStack {
-                        HStack {
-                            Button {
-                                showHistory = true
-                            } label: {
-                                Image(systemName: "line.3.horizontal")
-                                    .font(.system(size: 24))
-                                    .foregroundStyle(.white)
-                            }
-                            .padding(.top, 16)
-                            .padding(.leading, 24)
-                            Spacer()
-                        }
-                        Spacer()
+                    Button {
+                        showHistory = true
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
+                    .padding(.top, 8)
+                    .padding(.leading, 16)
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
         .sheet(isPresented: $showHistory) {
             HistoryView()

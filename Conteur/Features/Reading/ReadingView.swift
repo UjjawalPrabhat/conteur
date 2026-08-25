@@ -7,22 +7,13 @@ struct ReadingView: View {
 
     @State private var hasScrolled = false
     @State private var hasReachedBottom = false
+    @AppStorage("readingFontSize") private var fontSize = 18.0
+    private let minFontSize = 14.0
+    private let maxFontSize = 30.0
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 37/255, green: 73/255, blue: 136/255),
-                    Color(red: 35/255, green: 38/255, blue: 65/255)
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            StarsView()
-                .ignoresSafeArea()
+            StarsBackgroundView()
 
             VStack(spacing: 0) {
                 // Top Bar
@@ -50,7 +41,47 @@ struct ReadingView: View {
                             }
                             .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
                         }
+                        
                         Spacer()
+                        
+                        HStack(spacing: 0) {
+                            Button(action: {
+                                withAnimation {
+                                    fontSize = max(minFontSize, fontSize - 1)
+                                }
+                            }) {
+                                Image(systemName: "minus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                                    .frame(width: 32, height: 32)
+                            }
+                            
+                            Text("\(Int(fontSize))")
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                                .frame(width: 44)
+                            
+                            Button(action: {
+                                withAnimation {
+                                    fontSize = min(maxFontSize, fontSize + 1)
+                                }
+                            }) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                                    .frame(width: 32, height: 32)
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color(red: 237/255, green: 127/255, blue: 51/255).opacity(0.1))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color(red: 237/255, green: 127/255, blue: 51/255).opacity(0.3), lineWidth: 1)
+                                )
+                        )
                     }
                 }
                 .padding(.horizontal, 24)
@@ -122,13 +153,13 @@ struct ReadingView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(story.title)
-                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                .font(.system(size: max(24, fontSize + 14), weight: .bold, design: .monospaced))
                 .foregroundStyle(.white)
             
             let words = story.prose.components(separatedBy: .whitespacesAndNewlines).count
             let seconds = Int(story.readingTime.rounded())
             Text("\(words) words (\(seconds) seconds)")
-                .font(.system(size: 16, design: .monospaced))
+                .font(.system(size: max(14, fontSize - 2), design: .monospaced))
                 .foregroundStyle(.white.opacity(0.8))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -149,7 +180,7 @@ struct ReadingView: View {
         VStack(alignment: .leading, spacing: 24) {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
                 Text(paragraph)
-                    .font(.system(size: 18, design: .monospaced))
+                    .font(.system(size: fontSize, design: .monospaced))
                     .lineSpacing(4)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)

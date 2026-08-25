@@ -49,10 +49,7 @@ struct FeedbackView: View {
             .scrollIndicators(.hidden)
         }
         .background {
-            ZStack {
-                NightBackground()
-                StarsView()
-            }
+            StarsBackgroundView()
         }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
@@ -421,4 +418,120 @@ struct FeedbackAccordionView<Content: View>: View {
                 .stroke(Color.white, lineWidth: 1)
         )
     }
+}
+
+#Preview {
+    let story = StoryLibrary.thirdCast
+    let transcriptWords = [
+        SpokenWord(text: "There", start: 0.0, end: 0.3),
+        SpokenWord(text: "were", start: 0.4, end: 0.7),
+        SpokenWord(text: "three", start: 0.8, end: 1.1),
+        SpokenWord(text: "people", start: 1.2, end: 1.5),
+        SpokenWord(text: "who", start: 1.6, end: 1.8),
+        SpokenWord(text: "built", start: 1.9, end: 2.2),
+        SpokenWord(text: "an", start: 2.3, end: 2.4),
+        SpokenWord(text: "app", start: 2.5, end: 2.8),
+        SpokenWord(text: "together.", start: 2.9, end: 3.5)
+    ]
+    let transcript = Transcript(words: transcriptWords)
+    let timeline = FeatureTimeline(
+        transcript: transcript,
+        delivery: .empty,
+        prosody: []
+    )
+    let covered = story.beats.prefix(2).enumerated().map { index, beat in
+        BeatCoverage(beat: beat, quote: "built an app", at: Double(index) * 2.0)
+    }
+    let comparison = SourceComparison(
+        story: story,
+        covered: Array(covered),
+        omitted: Array(story.beats.dropFirst(2)),
+        rejected: [],
+        unresolved: [],
+        mentionedEntities: Array(story.cast.prefix(1)),
+        omittedEntities: Array(story.cast.dropFirst(1)),
+        inventedNames: [],
+        orderAccuracy: 1.0,
+        compression: 0.45,
+        conveyedStakes: true
+    )
+    let finding1 = Finding(
+        dimension: .coherence,
+        subject: "structure",
+        observation: "You kept the narrative arc clear from beginning to end.",
+        magnitude: 0.2,
+        weight: 0.3,
+        evidence: [.at(1.9, quote: "built an app")]
+    )
+    let finding2 = Finding(
+        dimension: .fidelity,
+        subject: "coverage",
+        observation: "The ending of the story was missing from the retelling.",
+        magnitude: 0.5,
+        weight: 0.4,
+        evidence: [.missing("how the project wrapped up")]
+    )
+    let assessments = [
+        DimensionAssessment(
+            dimension: .coherence,
+            band: .strong,
+            score: 0.88,
+            findings: [finding1]
+        ),
+        DimensionAssessment(
+            dimension: .fidelity,
+            band: .emerging,
+            score: 0.62,
+            findings: [finding2]
+        ),
+        DimensionAssessment(
+            dimension: .delivery,
+            band: .strong,
+            score: 0.90,
+            findings: []
+        ),
+        DimensionAssessment(
+            dimension: .engagement,
+            band: .strong,
+            score: 0.75,
+            findings: []
+        ),
+        DimensionAssessment(
+            dimension: .relevance,
+            band: .strong,
+            score: 0.85,
+            findings: []
+        ),
+        DimensionAssessment(
+            dimension: .structure,
+            band: .strong,
+            score: 0.78,
+            findings: []
+        )
+    ]
+    let diagnosis = Diagnosis(
+        assessments: assessments,
+        focus: assessments[1]
+    )
+    let feedback = Feedback(
+        dimension: .fidelity,
+        note: "You told the opening clearly, but missed how the project wrapped up in the end.",
+        challenge: "Tell it once more, and see if you can carry the story all the way through to the final launch.",
+        evidence: finding1.evidence + finding2.evidence
+    )
+    let sampleAssessment = Assessment(
+        recordedAt: Date(),
+        timeline: timeline,
+        comparison: comparison,
+        diagnosis: diagnosis,
+        feedback: feedback,
+        progress: nil
+    )
+
+    FeedbackView(
+        assessment: sampleAssessment,
+        earnedLevel: nil,
+        onRetell: {},
+        onDone: {}
+    )
 }
