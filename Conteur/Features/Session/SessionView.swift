@@ -133,7 +133,7 @@ struct SessionView: View {
     @ViewBuilder
     private var action: some View {
         switch model.phase {
-        case .ready, .failed, .tooShort, .preparing, .reading:
+        case .ready, .failed, .tooShort, .preparing:
             HoldStartButton(onComplete: {
                 model.begin()
             })
@@ -150,8 +150,14 @@ struct SessionView: View {
                 }
                 .frame(width: 72, height: 72)
             }
-        case .responding, .unmatched:
-            EmptyView()
+        case .reading, .responding, .unmatched:
+            Text("Processing...")
+                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(red: 0.38, green: 0.22, blue: 0.16))
+                .padding(.horizontal, 24)
+                .frame(height: 72)
+                .background(Color(red: 0.98, green: 0.95, blue: 0.85))
+                .clipShape(Capsule())
         }
     }
 
@@ -476,47 +482,56 @@ struct HoldStartButton: View {
     @State private var progress: CGFloat = 0
 
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color(red: 0.98, green: 0.95, blue: 0.85), lineWidth: 4)
-            
-            Circle()
-                .fill(Color(red: 0.38, green: 0.22, blue: 0.16))
-                .padding(6)
-            
-            // Fill animation while holding
-            Circle()
-                .fill(Color.orange.opacity(0.8))
-                .padding(6)
-                .scaleEffect(progress)
-                .opacity(progress)
-        }
-        .frame(width: 72, height: 72)
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !isHolding {
-                        isHolding = true
-                        withAnimation(.easeInOut(duration: 0.8)) {
-                            progress = 1.0
-                        }
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(800))
-                            if isHolding {
-                                isHolding = false
-                                onComplete()
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .stroke(Color(red: 0.98, green: 0.95, blue: 0.85), lineWidth: 4)
+                
+                Circle()
+                    .fill(Color(red: 0.38, green: 0.22, blue: 0.16))
+                    .padding(6)
+                
+                // Fill animation while holding
+                Circle()
+                    .fill(Color.orange.opacity(0.8))
+                    .padding(6)
+                    .scaleEffect(progress)
+                    .opacity(progress)
+            }
+            .frame(width: 72, height: 72)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if !isHolding {
+                            isHolding = true
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            withAnimation(.easeInOut(duration: 0.8)) {
+                                progress = 1.0
+                            }
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(800))
+                                if isHolding {
+                                    isHolding = false
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                    onComplete()
+                                }
                             }
                         }
                     }
-                }
-                .onEnded { _ in
-                    if isHolding {
-                        isHolding = false
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            progress = 0
+                    .onEnded { _ in
+                        if isHolding {
+                            isHolding = false
+                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                progress = 0
+                            }
                         }
                     }
-                }
-        )
+            )
+            
+            Text("Hold to light the fire")
+                .font(.system(size: 14, design: .monospaced))
+                .foregroundStyle(Color(red: 0.98, green: 0.95, blue: 0.85).opacity(0.8))
+        }
     }
 }
