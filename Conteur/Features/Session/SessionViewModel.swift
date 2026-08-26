@@ -119,6 +119,14 @@ final class SessionViewModel {
         self.challenge = challenge
     }
 
+    func configureForPreview(phase: Phase, elapsed: TimeInterval = 0, words: [SpokenWord] = []) {
+        self.phase = phase
+        self.elapsed = elapsed
+        if !words.isEmpty {
+            self.transcript = Transcript(words: words)
+        }
+    }
+
     func begin() {
         guard session == nil else { return }
         phase = .preparing

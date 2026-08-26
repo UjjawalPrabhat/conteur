@@ -27,6 +27,7 @@ struct OutlineButtonStyle: ButtonStyle {
             .foregroundStyle(Ink.primary)
             .frame(maxWidth: .infinity)
             .frame(height: height)
+            .contentShape(RoundedRectangle(cornerRadius: Radius.button))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.button)
                     .strokeBorder(Color.paper.opacity(0.2), lineWidth: 1)
@@ -46,6 +47,7 @@ struct FiresideButtonStyle: ButtonStyle {
             .frame(height: 54)
             .background(.ultraThinMaterial.opacity(0.6), in: .rect(cornerRadius: Radius.button))
             .background(Color(hex: 0x140C08).opacity(0.45), in: .rect(cornerRadius: Radius.button))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.button))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.button)
                     .strokeBorder(Color(hex: 0xFFD6AA).opacity(0.28), lineWidth: 1)

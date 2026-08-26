@@ -459,20 +459,3 @@ private struct Ember: View {
             .onAppear { risen = true }
     }
 }
-
-/// A fire that has not caught: the state for a telling too short to say anything about. No
-/// flame and no movement, because the screen is about there being nothing to show.
-struct DimmedEmber: View {
-    var body: some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [Color(hex: 0xFFD696).opacity(0.3), .clear],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: 60
-                )
-            )
-            .frame(width: 120, height: 120)
-    }
-}

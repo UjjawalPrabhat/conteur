@@ -28,18 +28,46 @@ struct TellFlowView: View {
     @State private var isTelling = false
     /// Set only when this telling was the one that moved the fire up a level.
     @State private var earnedLevel: FireLevel?
+    @State private var showHistory = false
 
     var body: some View {
         NavigationStack {
-            content
-                // The feedback fades in rather than sliding. A push reads as going somewhere
-                // else; this is the fire answering, and it should arrive where you are.
-                .animation(.easeInOut(duration: 0.35), value: stage)
-                .transition(.opacity)
+            ZStack {
+                StarsBackgroundView()
+
+                content
+                    // The feedback fades in rather than sliding. A push reads as going somewhere
+                    // else; this is the fire answering, and it should arrive where you are.
+                    .animation(.easeInOut(duration: 0.35), value: stage)
+                    .transition(.opacity)
+            }
+            .overlay(alignment: .topLeading) {
+                if stage == .choosing {
+                    Button {
+                        showHistory = true
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .padding(.top, 8)
+                    .padding(.leading, 16)
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+        .sheet(isPresented: $showHistory) {
+            HistoryView()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Color(hex: 0x0A1024))
+                .presentationCornerRadius(32)
         }
         // The tab bar is a distraction while somebody is mid-story, so it goes away for
         // the telling and comes back afterwards.
-        .toolbar(isTelling ? .hidden : .automatic, for: .tabBar)
+        .toolbar((stage == .reading || stage == .telling) ? .hidden : .automatic, for: .tabBar)
     }
 
     @ViewBuilder
