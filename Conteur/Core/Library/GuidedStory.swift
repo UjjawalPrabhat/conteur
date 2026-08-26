@@ -157,4 +157,42 @@ extension GuidedStory {
     func entity(named name: String) -> StoryEntity? {
         cast.first { $0.name == name }
     }
+
+    /// A concrete, one-sentence preview of the story's core premise and hook.
+    var synopsis: String {
+        switch id {
+        case "third-cast":
+            return "A fisherman catches a speaking fish that grants his wishes, but asking for the sea itself costs him everything."
+        case "salt-road":
+            return "A young woman trades her voice for safe passage, only to discover the road's danger was an old myth."
+        case "coat-of-nine-winters":
+            return "A magical coat shields a boy from grief and cold, but holds nine years of sorrow waiting for him."
+        case "what-the-miller-owed":
+            return "A desperate miller clears his mounting debts by trading away his young apprentice's indenture."
+        case "lantern-keeper":
+            return "A lighthouse keeper investigates the one night her father left the lantern dark and discovers a tragic secret."
+        case "what-the-house-kept":
+            return "Clearing her late mother's home, a daughter uncovers sixty returned letters to an aunt she never knew."
+        case "second-kitchen":
+            return "A grieving widower rebuilds his kitchen to match his late wife's, unknowingly driving his daughter away."
+        case "long-way-round":
+            return "Driving his father to a critical hospital scan, a son takes a coastal detour to share precious silent time."
+        case "nobodys-fault":
+            return "A broken hallway shelf triggers a heated argument that uncovers a couple's unspoken truths."
+        case "tuesdays-chair":
+            return "A woman continues going to a support group she no longer needs to keep a comforting chair open for newcomers."
+        case "the-nine-fifteen", "nine-fifteen":
+            return "A daily commuter follows a mysterious passenger carrying different briefcases and learns his touching purpose."
+        case "wrong-umbrella":
+            return "Picking up the wrong library umbrella leads a woman to a stranger connected to her brother's drowning."
+        case "room-four-b":
+            return "A hotel cleaner discovers an unslept bed and quietly leaves extra comforts for a struggling guest."
+        case "meter-reading":
+            return "An unexplained power bill in an empty house reveals a year of freezer meals lovingly prepared by an ailing father."
+        case "cyclist-on-ferndale":
+            return "A driver investigates an erratic cyclist, only to discover he was deliberately slowing cars near a school."
+        default:
+            return stakes
+        }
+    }
 }

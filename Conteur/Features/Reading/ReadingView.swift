@@ -6,14 +6,15 @@ struct ReadingView: View {
     let onFinished: () -> Void
 
     @State private var hasScrolled = false
-    @State private var hasReachedBottom = false
+    @State private var isAtBottom = false
     @AppStorage("readingFontSize") private var fontSize = 18.0
     private let minFontSize = 14.0
     private let maxFontSize = 30.0
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            StarsBackgroundView()
+            // Dimmer stars specifically for the reading experience
+            StarsBackgroundView(starsOpacity: 0.2)
 
             VStack(spacing: 0) {
                 // Top Bar
@@ -87,9 +88,6 @@ struct ReadingView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
                 .padding(.bottom, 16)
-                // We add a subtle gradient to the top bar so stars show through but text doesn't clash
-                // Actually, if we use VStack, the scrollview clips exactly at the bottom of this bar!
-                // So we don't need a background on the top bar to hide the text, the layout clips it automatically.
 
                 // ScrollView
                 ScrollView {
@@ -110,11 +108,11 @@ struct ReadingView: View {
                 .scrollIndicators(.hidden)
             }
 
-            // Pinned button at bottom
+            // Pinned floating button at bottom - smoothly appears on bottom scroll, disappears on scroll up
             VStack {
                 Spacer()
                 Button(action: onFinished) {
-                    Text("Start Storytelling") // should be bitcount
+                    Text("Start Storytelling")
                         .textStyle(.bitcountAction)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -126,17 +124,19 @@ struct ReadingView: View {
                 .padding(.bottom, 32)
                 .background(
                     LinearGradient(
-                        colors: [.clear, Color(red: 35/255, green: 38/255, blue: 65/255).opacity(0.9)],
+                        colors: [.clear, Color(hex: 0x050C1A).opacity(0.92), Color(hex: 0x050C1A)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 120)
+                    .frame(height: 140)
                     .offset(y: 20)
                 )
             }
             .ignoresSafeArea(edges: .bottom)
-            .opacity(hasReachedBottom ? 1 : 0)
-            .animation(.easeInOut(duration: 0.3), value: hasReachedBottom)
+            .opacity(isAtBottom ? 1 : 0)
+            .offset(y: isAtBottom ? 0 : 25)
+            .animation(.easeInOut(duration: 0.35), value: isAtBottom)
+            .allowsHitTesting(isAtBottom)
         }
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -144,8 +144,11 @@ struct ReadingView: View {
         .navigationBarBackButtonHidden(true)
         .onPreferenceChange(ScrollBottomKey.self) { minY in
             let screenHeight = UIScreen.main.bounds.height
-            if minY < screenHeight + 50 {
-                hasReachedBottom = true
+            let reached = minY < screenHeight + 50
+            if reached != isAtBottom {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    isAtBottom = reached
+                }
             }
         }
     }
@@ -196,8 +199,7 @@ struct ReadingView: View {
     }
 }
 
-
-struct ScrollBottomKey: PreferenceKey {
+private struct ScrollBottomKey: PreferenceKey {
     static let defaultValue: CGFloat = .infinity
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()

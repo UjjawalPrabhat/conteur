@@ -59,6 +59,28 @@ struct SessionView: View {
                 fireside
             }
         }
+        .overlay(alignment: .topLeading) {
+            if model.phase == .ready || model.phase == .preparing {
+                Button {
+                    onAbandon()
+                    Task {
+                        await model.cancel()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .bold))
+                        Text("Pick a story")
+                            .textStyle(.navAction)
+                    }
+                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
+                    .contentShape(Rectangle())
+                }
+                .transition(.opacity)
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)

@@ -24,6 +24,7 @@ struct StoryPickerView: View {
     @State private var lastWheelOffset: CGFloat = 0
     @State private var insertOffset: CGFloat = 0
     @State private var transitionProgress: CGFloat = 0
+    @State private var chevronBounce = false
 
     private let insertionTravelDistance: CGFloat = 250
     private let insertAnimationDuration: Double = 0.4
@@ -61,7 +62,8 @@ struct StoryPickerView: View {
 
                     Text("Drag down to pick the story")
                         .textStyle(.secondary)
-                        .foregroundStyle(Color.white.opacity(0.85))
+                        .foregroundStyle(Color.white.opacity(chevronBounce ? 0.95 : 0.7))
+                        .offset(y: chevronBounce ? 2 : -2)
                         .padding(.top, 10)
                         .padding(.bottom, 48)
                         .opacity((dragPhase == .inserting || dragPhase == .committed) ? 0 : 1)
@@ -77,6 +79,11 @@ struct StoryPickerView: View {
         }
         .contentShape(Rectangle())
         .gesture(dragGesture)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                chevronBounce = true
+            }
+        }
     }
 
     @ViewBuilder
@@ -128,12 +135,15 @@ struct StoryPickerView: View {
     private var chevrons: some View {
         VStack(spacing: -6) {
             Image(systemName: "chevron.down")
-                .font(.system(size: 25, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xDCE8F5).opacity(0.8))
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(Color(hex: 0xDCE8F5).opacity(chevronBounce ? 0.95 : 0.45))
+                .offset(y: chevronBounce ? 3 : -3)
             Image(systemName: "chevron.down")
-                .font(.system(size: 25, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xDCE8F5).opacity(0.8))
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(Color(hex: 0xDCE8F5).opacity(chevronBounce ? 1.0 : 0.6))
+                .offset(y: chevronBounce ? 6 : -1)
         }
+        .offset(y: chevronBounce ? 4 : -2)
         .opacity((dragPhase == .inserting || dragPhase == .committed) ? 0 : 1)
         .animation(.easeInOut(duration: 0.2), value: dragPhase == .inserting || dragPhase == .committed)
     }
@@ -357,27 +367,25 @@ struct StoryPickerView: View {
                 .textStyle(.bitcountCardTitle)
                 .foregroundStyle(isHighlighted ? Color.black : Color.white)
                 .multilineTextAlignment(.center)
-                .padding(.top, 22)
-                .padding(.horizontal, 14)
+                .padding(.top, 20)
+                .padding(.horizontal, 12)
 
             Spacer()
 
-            Text(synopsis(for: story))
+            Text(story.synopsis)
                 .textStyle(.secondary)
                 .foregroundStyle(isHighlighted ? Color.black.opacity(0.85) : Color.white.opacity(0.85))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 14)
+                .lineLimit(4)
+                .minimumScaleFactor(0.85)
+                .padding(.horizontal, 12)
 
             Spacer()
 
             Text("\(story.wordCount) words")
                 .textStyle(.stats)
                 .foregroundStyle(isHighlighted ? Color.black.opacity(0.75) : Color.white.opacity(0.75))
-                .padding(.bottom, 20)
+                .padding(.bottom, 18)
         }
-    }
-
-    private func synopsis(for story: GuidedStory) -> String {
-        "It's a \(story.genre.label.lowercased()) story about \(story.cast.count) characters."
     }
 }

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct StarsBackgroundView: View {
     var backgroundColor: Color = Color(hex: 0x050C1A)
+    var starsOpacity: Double = 1.0
 
     var body: some View {
         ZStack {
@@ -16,6 +17,7 @@ struct StarsBackgroundView: View {
                 .ignoresSafeArea()
 
             StarsView()
+                .opacity(starsOpacity)
                 .ignoresSafeArea()
         }
         .allowsHitTesting(false)

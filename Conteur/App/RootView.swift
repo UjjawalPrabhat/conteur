@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    @State private var isShowingSplash = true
+
     var body: some View {
 //        TabView {
 //            Tab("Tell", systemImage: "waveform") {
@@ -18,8 +20,23 @@ struct RootView: View {
 //        // is pinned rather than left to follow the system into a palette it has no colours for.
 //        .preferredColorScheme(.dark)
 //        .tabBarMinimizeBehavior(.onScrollDown)
-        TellFlowView()
-        .task { await RecordingCleanup.removeStrandedRecordings() }
+        ZStack {
+            TellFlowView()
+                .task { await RecordingCleanup.removeStrandedRecordings() }
+
+            if isShowingSplash {
+                SplashScreenView()
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    isShowingSplash = false
+                }
+            }
+        }
     }
 }
 
