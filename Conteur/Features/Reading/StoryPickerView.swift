@@ -3,23 +3,16 @@ import SwiftUI
 struct StoryPickerView: View {
     let onChosen: (GuidedStory) -> Void
 
-    private struct WheelItem: Identifiable {
-        let id: String
-        let story: GuidedStory
-    }
-
-    private let displayStories: [WheelItem]
+    private let stories: [GuidedStory]
 
     init(onChosen: @escaping (GuidedStory) -> Void) {
         self.onChosen = onChosen
 
-        var stories = Genre.allCases.flatMap { StoryLibrary.stories(in: $0) }
-        while stories.count < 5 && !stories.isEmpty {
-            stories.append(contentsOf: stories)
+        var rawStories = Genre.allCases.flatMap { StoryLibrary.stories(in: $0) }
+        if rawStories.isEmpty {
+            rawStories = StoryLibrary.all
         }
-        self.displayStories = stories.enumerated().map { offset, story in
-            WheelItem(id: "\(offset)-\(story.id)", story: story)
-        }
+        self.stories = rawStories
     }
 
     private enum DragPhase: Equatable {
@@ -50,8 +43,8 @@ struct StoryPickerView: View {
                 .zIndex(1)
 
             VStack(spacing: 0) {
-                Text("Pick a Story")
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                Text("Pick a Story") // should be bitcount
+                    .textStyle(.bitcountPickerTitle)
                     .foregroundStyle(.white)
                     .padding(.top, 190)
 
@@ -67,7 +60,7 @@ struct StoryPickerView: View {
                         .zIndex(2)
 
                     Text("Drag down to pick the story")
-                        .font(.system(size: 14, design: .monospaced))
+                        .textStyle(.secondary)
                         .foregroundStyle(Color.white.opacity(0.85))
                         .padding(.top, 10)
                         .padding(.bottom, 48)
@@ -86,52 +79,50 @@ struct StoryPickerView: View {
         .gesture(dragGesture)
     }
 
+    @ViewBuilder
     private var wheel: some View {
         let spacingMultiplier: CGFloat = 1.15
-        
         let verticalDrop: CGFloat = 10.7
         let fanTilt: Double = 22.0
         let sideShrink: CGFloat = 0.08      
+        let count = stories.count
 
-        return ZStack {
-            ForEach(Array(displayStories.enumerated()), id: \.element.id) { index, item in
-                let posX = wrappedOffset(forIndex: index, offset: wheelOffset)
-                let progress = posX / itemWidth
-                let isCenter = abs(progress) < 0.5
-                let isInserting = (dragPhase == .inserting || dragPhase == .committed)
+        if count > 0 {
+            let centerVirtualIndex = Int(round(-wheelOffset / itemWidth))
+            let visibleRange = (centerVirtualIndex - 3)...(centerVirtualIndex + 3)
 
-                storyCard(story: item.story, isCenter: isCenter)
-                    .offset(
-                        x: (isCenter && isInserting) ? 0 : (posX * spacingMultiplier),
-                        y: (isCenter && isInserting) ? insertOffset : abs(progress) * verticalDrop
-                    )
-                
-                    .rotationEffect(
-                        .degrees(-progress * fanTilt)
-                    )
-                    .scaleEffect(
-                        1 - min(1, abs(progress)) * sideShrink
-                    )
-                    .zIndex(isCenter ? 10 : 5 - abs(progress))
+            ZStack {
+                ForEach(visibleRange, id: \.self) { virtualIndex in
+                    let storyIndex = (virtualIndex % count + count) % count
+                    let story = stories[storyIndex]
+                    let posX = CGFloat(virtualIndex) * itemWidth + wheelOffset
+                    let progress = posX / itemWidth
+                    let isCenter = abs(progress) < 0.5
+                    let isInserting = (dragPhase == .inserting || dragPhase == .committed)
+
+                    storyCard(story: story, progress: progress, isInserting: isInserting)
+                        .offset(
+                            x: (isCenter && isInserting) ? 0 : (posX * spacingMultiplier),
+                            y: (isCenter && isInserting) ? insertOffset : abs(progress) * verticalDrop
+                        )
+                        .rotationEffect(
+                            .degrees(-progress * fanTilt)
+                        )
+                        .scaleEffect(
+                            1 - min(1, abs(progress)) * sideShrink
+                        )
+                        .zIndex(100.0 - Double(abs(posX)))
+                }
             }
+            .frame(height: cardHeight)
         }
-        .frame(height: cardHeight)
-    }
-    
-    private func wrappedOffset(forIndex index: Int, offset: CGFloat) -> CGFloat {
-        let totalWidth = CGFloat(displayStories.count) * itemWidth
-        guard totalWidth > 0 else { return 0 }
-        let halfWidth = totalWidth / 2
-        var pos = (CGFloat(index) * itemWidth + offset).truncatingRemainder(dividingBy: totalWidth)
-        if pos > halfWidth { pos -= totalWidth }
-        if pos < -halfWidth { pos += totalWidth }
-        return pos
     }
 
     private func centeredStory(for offset: CGFloat) -> GuidedStory? {
-        displayStories.indices
-            .min { abs(wrappedOffset(forIndex: $0, offset: offset)) < abs(wrappedOffset(forIndex: $1, offset: offset)) }
-            .map { displayStories[$0].story }
+        guard !stories.isEmpty else { return nil }
+        let centerVirtualIndex = Int(round(-offset / itemWidth))
+        let storyIndex = (centerVirtualIndex % stories.count + stories.count) % stories.count
+        return stories[storyIndex]
     }
 
     private var chevrons: some View {
@@ -263,7 +254,7 @@ struct StoryPickerView: View {
                     break
                 }
             }
-            .onEnded { _ in
+            .onEnded { value in
                 switch dragPhase {
                 case .inserting:
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -271,8 +262,19 @@ struct StoryPickerView: View {
                     }
                     dragPhase = .idle
                 case .scrolling:
-                    let targetOffset = -round(-wheelOffset / itemWidth) * itemWidth
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                    let velocity = value.velocity.width
+                    let flickThreshold: CGFloat = 250
+                    var targetOffset: CGFloat
+                    
+                    if abs(velocity) > flickThreshold {
+                        let direction: CGFloat = velocity > 0 ? 1 : -1
+                        let currentSnapped = -round(-lastWheelOffset / itemWidth) * itemWidth
+                        targetOffset = currentSnapped + (direction * itemWidth)
+                    } else {
+                        targetOffset = -round(-wheelOffset / itemWidth) * itemWidth
+                    }
+
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
                         wheelOffset = targetOffset
                         lastWheelOffset = targetOffset
                     }
@@ -301,14 +303,59 @@ struct StoryPickerView: View {
         }
     }
 
-    private func storyCard(story: GuidedStory, isCenter: Bool) -> some View {
-        let isBeingInserted = (dragPhase == .inserting || dragPhase == .committed)
-        let showHighlight = isCenter && !isBeingInserted
+    private func storyCard(story: GuidedStory, progress: CGFloat, isInserting: Bool) -> some View {
+        let absProgress = abs(progress)
+        let t = min(1.0, max(0.0, 1.0 - absProgress * 2.0))
+        let highlight = t * t * (3.0 - 2.0 * t) // smoothstep interpolation
 
-        return VStack {
-            Text(story.title)
-                .font(.system(size: 20, weight: .bold, design: .monospaced))
-                .foregroundStyle(isCenter ? .black : .white)
+        return ZStack {
+            // Dark card content (visible when off-center)
+            cardContent(story: story, isHighlighted: false)
+                .opacity(1.0 - highlight)
+
+            // Light card content (visible when centered)
+            cardContent(story: story, isHighlighted: true)
+                .opacity(highlight)
+        }
+        .frame(width: cardWidth, height: cardHeight)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(Color(hex: 0x0C1236))
+
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(Color.white)
+                    .opacity(highlight)
+            }
+        }
+        .overlay {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(
+                        Color.white.opacity(0.12 * (1.0 - highlight)),
+                        lineWidth: 1
+                    )
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(
+                        Color(hex: 0xFF7A00).opacity(highlight),
+                        lineWidth: 1.0 + highlight * 2.5
+                    )
+            }
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color(hex: 0xD8E8FF).opacity(0.35 * highlight))
+                .blur(radius: 24)
+                .scaleEffect(1.0 + 0.08 * highlight)
+                .opacity(isInserting ? 0 : 1)
+        }
+    }
+
+    private func cardContent(story: GuidedStory, isHighlighted: Bool) -> some View {
+        VStack {
+            Text(story.title) // should be bitcount
+                .textStyle(.bitcountCardTitle)
+                .foregroundStyle(isHighlighted ? Color.black : Color.white)
                 .multilineTextAlignment(.center)
                 .padding(.top, 22)
                 .padding(.horizontal, 14)
@@ -316,37 +363,18 @@ struct StoryPickerView: View {
             Spacer()
 
             Text(synopsis(for: story))
-                .font(.system(size: 14, design: .monospaced))
-                .foregroundStyle(isCenter ? .black : Color.white.opacity(0.85))
+                .textStyle(.secondary)
+                .foregroundStyle(isHighlighted ? Color.black.opacity(0.85) : Color.white.opacity(0.85))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 14)
 
             Spacer()
 
             Text("\(story.wordCount) words")
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundStyle(isCenter ? .black : Color.white.opacity(0.75))
+                .textStyle(.stats)
+                .foregroundStyle(isHighlighted ? Color.black.opacity(0.75) : Color.white.opacity(0.75))
                 .padding(.bottom, 20)
         }
-        .frame(width: cardWidth, height: cardHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 22)
-                .fill(isCenter ? Color.white : Color(hex: 0x0C1236))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(
-                    showHighlight ? Color(hex: 0xFF7A00) : Color.white.opacity(0.12),
-                    lineWidth: showHighlight ? 3.5 : 1
-                )
-        )
-        .background(
-            RoundedRectangle(cornerRadius: 22)
-                .fill(showHighlight ? Color(hex: 0xD8E8FF).opacity(0.35) : Color.clear)
-                .blur(radius: 28)
-                .scaleEffect(1.08)
-        )
-        .animation(.easeInOut(duration: 0.15), value: showHighlight)
     }
 
     private func synopsis(for story: GuidedStory) -> String {

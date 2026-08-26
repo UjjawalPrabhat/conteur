@@ -55,7 +55,7 @@ struct FeedbackView: View {
         .safeAreaInset(edge: .bottom) {
             Button(action: onDone) {
                 Text("Pick Another Story")
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .textStyle(.actionLarge)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -71,18 +71,18 @@ struct FeedbackView: View {
     private var meta: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(model.assessment.comparison.story.title)
-                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                .textStyle(.screenTitle)
                 .foregroundStyle(.white)
             
             let words = model.assessment.timeline.transcript.words.count
             let duration = model.assessment.timeline.transcript.duration.secondsLabel
             Text("\(words) words (\(duration))")
-                .font(.system(size: 14, design: .monospaced))
+                .textStyle(.secondary)
                 .foregroundStyle(Color.gray)
             
             let isSecond = model.assessment.progress != nil
             Text(isSecond ? "Second Telling" : "First Telling")
-                .font(.system(size: 12, design: .monospaced))
+                .textStyle(.tag)
                 .foregroundStyle(.black)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)
@@ -103,12 +103,12 @@ struct FeedbackView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(model.note)
-                .font(.system(size: 16, design: .monospaced))
+                .textStyle(.body)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
                 
             Text("What's to improve")
-                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .textStyle(.cardHeading)
                 .foregroundStyle(.white)
                 .padding(.top, 8)
         }
@@ -141,13 +141,13 @@ struct FeedbackView: View {
     private var next: some View {
         VStack(spacing: 20) {
             Text(model.challenge)
-                .font(.system(size: 16, design: .monospaced))
+                .textStyle(.body)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
             
             Button(action: onRetell) {
                 Text("Tell it again")
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .textStyle(.actionLarge)
                     .foregroundStyle(Color(hex: 0xFF8C00))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -157,7 +157,7 @@ struct FeedbackView: View {
             }
             
             Text("Same story. You won't read it again.")
-                .font(.system(size: 12, design: .monospaced))
+                .textStyle(.caption)
                 .foregroundStyle(Color.gray)
         }
         .padding(24)
@@ -198,11 +198,11 @@ struct FeedbackView: View {
                     ForEach(model.bands, id: \.dimension) { assessment in
                         HStack {
                             Text(assessment.dimension.title.capitalized)
-                                .font(.system(size: 16, design: .monospaced))
+                                .textStyle(.body)
                                 .foregroundStyle(.white)
                             Spacer()
                             Text(assessment.band.label)
-                                .font(.system(size: 14, design: .monospaced))
+                                .textStyle(.pillLabel)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 6)
@@ -220,7 +220,7 @@ struct FeedbackView: View {
                         ForEach(model.passages) { passage in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(passage.start.timestampLabel)
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                    .textStyle(.timestamp)
                                     .foregroundStyle(Color(hex: 0xFF8C00))
                                 
                                 HStack(alignment: .top, spacing: 12) {
@@ -229,7 +229,7 @@ struct FeedbackView: View {
                                         .frame(width: 2)
                                     
                                     Text(passage.text)
-                                        .font(.system(size: 14, design: .monospaced))
+                                        .textStyle(.transcript)
                                         .foregroundStyle(.gray)
                                         .lineSpacing(4)
                                 }
@@ -272,10 +272,10 @@ struct FeedbackView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(item.evidence.at?.timestampLabel ?? "")
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .textStyle(.timestamp)
                     .foregroundStyle(Color(hex: 0xFF8C00))
                 Text(item.dimension.title.capitalized)
-                    .font(.system(size: 12, design: .monospaced))
+                    .textStyle(.caption)
                     .foregroundStyle(.gray)
             }
             
@@ -287,12 +287,12 @@ struct FeedbackView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if let quote = item.evidence.quote {
                         Text(quote)
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .textStyle(.quote)
                             .foregroundStyle(.white)
                     }
                     if let detail = item.observation ?? item.evidence.measure {
                         Text(detail)
-                            .font(.system(size: 14, design: .monospaced))
+                            .textStyle(.secondary)
                             .foregroundStyle(Color.gray)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -312,11 +312,11 @@ struct FeedbackView: View {
     private func absenceCard(_ item: FeedbackViewModel.Detail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(item.dimension.title.capitalized)
-                .font(.system(size: 12, design: .monospaced))
+                .textStyle(.caption)
                 .foregroundStyle(.gray)
             
             Text(item.observation ?? item.evidence.quote ?? "")
-                .font(.system(size: 14, design: .monospaced))
+                .textStyle(.secondary)
                 .foregroundStyle(Color.gray)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -343,11 +343,11 @@ struct FeedbackView: View {
             } label: {
                 HStack {
                     Text(title)
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .textStyle(.rowTitle)
                         .foregroundStyle(.white)
                     Spacer()
                     Text(trailing)
-                        .font(.system(size: 14, design: .monospaced))
+                        .textStyle(.secondary)
                         .foregroundStyle(.gray)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14))
@@ -391,11 +391,11 @@ struct FeedbackAccordionView<Content: View>: View {
             } label: {
                 HStack {
                     Text(title)
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .textStyle(.rowTitle)
                         .foregroundStyle(.white)
                     Spacer()
                     Text(trailing)
-                        .font(.system(size: 14, design: .monospaced))
+                        .textStyle(.secondary)
                         .foregroundStyle(.gray)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14))

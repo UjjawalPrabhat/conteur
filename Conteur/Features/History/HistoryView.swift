@@ -14,7 +14,7 @@ struct HistoryView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack {
                         Text("Recents")
-                            .font(.system(size: 28, weight: .bold, design: .monospaced))
+                            .textStyle(.screenTitleMedium)
                             .foregroundStyle(.white)
                         Spacer()
                         Button {
@@ -53,10 +53,10 @@ struct HistoryView: View {
     private var empty: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Nothing yet")
-                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .textStyle(.cardHeading)
                 .foregroundStyle(.white)
             Text("Your retellings will collect here.")
-                .font(.system(size: 14, design: .monospaced))
+                .textStyle(.secondary)
                 .foregroundStyle(.gray)
         }
     }
@@ -78,12 +78,12 @@ struct HistoryView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             Text(retelling.storyTitle ?? "A story")
-                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                .textStyle(.rowTitle)
                                 .foregroundStyle(.white)
                             
                             let tellingText = retelling.attempt > 1 ? "Second Telling" : "First Telling"
                             Text(tellingText)
-                                .font(.system(size: 10, design: .monospaced))
+                                .textStyle(.tagSmall)
                                 .foregroundStyle(.black)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
@@ -92,7 +92,7 @@ struct HistoryView: View {
                         }
                         
                         Text(retelling.recordedAt.formatted(.dateTime.month(.abbreviated).day().year()))
-                            .font(.system(size: 12, design: .monospaced))
+                            .textStyle(.meta)
                             .foregroundStyle(.gray)
                     }
                     Spacer()
@@ -108,7 +108,7 @@ struct HistoryView: View {
                     RetellingDetailView(retelling: retelling)
                 } label: {
                     Text(note)
-                        .font(.system(size: 14, design: .monospaced))
+                        .textStyle(.secondary)
                         .foregroundStyle(Color.gray)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 4)

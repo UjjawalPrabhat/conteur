@@ -20,11 +20,11 @@ struct ReadingView: View {
                 VStack(spacing: 8) {
                     ZStack {
                         Text(" ")
-                            .font(.system(size: 16, design: .monospaced))
+                            .textStyle(.navTitle)
                         
                         if hasScrolled {
                             Text(story.title)
-                                .font(.system(size: 16, design: .monospaced))
+                                .textStyle(.navTitle)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .transition(.opacity)
@@ -37,7 +37,7 @@ struct ReadingView: View {
                                 Image(systemName: "chevron.left")
                                     .font(.system(size: 16, weight: .bold))
                                 Text("Pick a story")
-                                    .font(.system(size: 16, design: .monospaced))
+                                    .textStyle(.navAction)
                             }
                             .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
                         }
@@ -57,7 +57,7 @@ struct ReadingView: View {
                             }
                             
                             Text("\(Int(fontSize))")
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .textStyle(.stats)
                                 .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
                                 .frame(width: 44)
                             
@@ -114,8 +114,8 @@ struct ReadingView: View {
             VStack {
                 Spacer()
                 Button(action: onFinished) {
-                    Text("Start Storytelling")
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    Text("Start Storytelling") // should be bitcount
+                        .textStyle(.bitcountAction)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -153,13 +153,13 @@ struct ReadingView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(story.title)
-                .font(.system(size: max(24, fontSize + 14), weight: .bold, design: .monospaced))
+                .textStyle(.screenTitle)
                 .foregroundStyle(.white)
             
             let words = story.prose.components(separatedBy: .whitespacesAndNewlines).count
             let seconds = Int(story.readingTime.rounded())
             Text("\(words) words (\(seconds) seconds)")
-                .font(.system(size: max(14, fontSize - 2), design: .monospaced))
+                .textStyle(.secondary)
                 .foregroundStyle(.white.opacity(0.8))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -180,7 +180,7 @@ struct ReadingView: View {
         VStack(alignment: .leading, spacing: 24) {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
                 Text(paragraph)
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(.inconsolata(.regular, size: fontSize))
                     .lineSpacing(4)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)

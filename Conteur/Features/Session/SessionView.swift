@@ -31,6 +31,7 @@ struct SessionView: View {
         priming: @escaping () -> Priming,
         previous: Diagnosis?,
         isTelling: Binding<Bool>,
+        viewModel: SessionViewModel? = nil,
         onAbandon: @escaping () -> Void,
         onFinish: @escaping (Assessment) -> Void
     ) {
@@ -42,7 +43,7 @@ struct SessionView: View {
         _isTelling = isTelling
         self.onAbandon = onAbandon
         self.onFinish = onFinish
-        _model = State(initialValue: SessionViewModel(story: story))
+        _model = State(initialValue: viewModel ?? SessionViewModel(story: story))
     }
 
     var body: some View {
@@ -73,6 +74,9 @@ struct SessionView: View {
             )
             // Removed model.begin() to start in .ready state
         }
+        .onAppear {
+            sessionScene.setLit(shouldBeLit)
+        }
         .onChange(of: model.phase) { _, phase in
             isTelling = true
             sessionScene.setLit(shouldBeLit)
@@ -88,18 +92,17 @@ struct SessionView: View {
             
             if model.phase == .ready || model.phase == .preparing {
                 Text("Start\nstorytelling")
-                    // We'll use VT323 or Courier to look pixelated. Actually, the mockup uses a pixel font.
-                    .font(.system(size: 32, weight: .bold, design: .monospaced))
+                    .textStyle(.bitcountPickerTitle)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.white)
                     .padding(.bottom, 80)
             } else if model.phase == .listening || model.phase == .reading {
                 VStack(spacing: 8) {
                     Text(clock)
-                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .textStyle(.timerDisplay)
                         .foregroundStyle(.white)
                     Text("\(model.spokenWords) words")
-                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .textStyle(.bitcountPickerTitle)
                         .foregroundStyle(.white)
                 }
                 .padding(.bottom, 80)
@@ -140,7 +143,7 @@ struct SessionView: View {
             }
         case .reading, .responding, .unmatched:
             Text("Processing...")
-                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                .textStyle(.statusBadge)
                 .foregroundStyle(Color(red: 0.38, green: 0.22, blue: 0.16))
                 .padding(.horizontal, 24)
                 .frame(height: 72)
@@ -208,9 +211,9 @@ struct SessionView: View {
                 Button("Tell it again") { model.begin() }
                     .buttonStyle(EmberButtonStyle())
                 Button("Back to stories") {
+                    onAbandon()
                     Task {
                         await model.cancel()
-                        onAbandon()
                     }
                 }
                 .buttonStyle(OutlineButtonStyle())
@@ -367,13 +370,13 @@ class SessionScene: SKScene {
     func setLit(_ isLit: Bool) {
         let duration = 0.8
         if isLit {
-            fireNode.run(SKAction.fadeIn(withDuration: duration))
+            fireNode?.run(SKAction.fadeIn(withDuration: duration))
             for dark in darkRocks { dark.run(SKAction.fadeOut(withDuration: duration)) }
             for lit in litRocks { lit.run(SKAction.fadeIn(withDuration: duration)) }
             
-            darkGround.run(SKAction.fadeOut(withDuration: duration))
+            darkGround?.run(SKAction.fadeOut(withDuration: duration))
             
-            litGround.run(SKAction.fadeIn(withDuration: duration))
+            litGround?.run(SKAction.fadeIn(withDuration: duration))
             
             for cloud in cloudsLeft {
                 cloud.run(SKAction.moveTo(x: -1000, duration: duration * 2.3))
@@ -383,12 +386,12 @@ class SessionScene: SKScene {
             }
             
         } else {
-            fireNode.run(SKAction.fadeOut(withDuration: duration))
+            fireNode?.run(SKAction.fadeOut(withDuration: duration))
             for dark in darkRocks { dark.run(SKAction.fadeIn(withDuration: duration)) }
-            for lit in litRocks { lit.run(SKAction.fadeOut(withDuration: duration)) }
+            for lit in litRocks { lit.run(SKAction.fadeIn(withDuration: duration)) }
             
-            darkGround.run(SKAction.fadeIn(withDuration: duration))
-            litGround.run(SKAction.fadeOut(withDuration: duration))
+            darkGround?.run(SKAction.fadeIn(withDuration: duration))
+            litGround?.run(SKAction.fadeOut(withDuration: duration))
         }
     }
 }
@@ -448,8 +451,74 @@ struct HoldStartButton: View {
             )
             
             Text("Hold to light the fire")
-                .font(.system(size: 14, design: .monospaced))
+                .textStyle(.secondary)
                 .foregroundStyle(Color(red: 0.98, green: 0.95, blue: 0.85).opacity(0.8))
         }
+    }
+}
+
+// MARK: - Previews
+
+#Preview("Hold to Start") {
+    HoldStartButton {}
+        .padding()
+        .background(Color.black)
+}
+
+#Preview("Session - Ready") {
+    SessionPreviewWrapper(phase: .ready)
+}
+
+#Preview("Session - Listening") {
+    SessionPreviewWrapper(phase: .listening)
+}
+
+#Preview("Session - Too Short") {
+    SessionPreviewWrapper(phase: .tooShort)
+}
+
+#Preview("Session - Unmatched") {
+    SessionPreviewWrapper(phase: .unmatched)
+}
+
+private struct SessionPreviewWrapper: View {
+    let story: GuidedStory
+    let model: SessionViewModel
+
+    init(phase: SessionViewModel.Phase) {
+        let story = StoryLibrary.thirdCast
+        self.story = story
+        let vm = SessionViewModel(story: story)
+        let sampleWords = [
+            SpokenWord(text: "There", start: 0.0, end: 0.3),
+            SpokenWord(text: "were", start: 0.4, end: 0.7),
+            SpokenWord(text: "three", start: 0.8, end: 1.1),
+            SpokenWord(text: "people", start: 1.2, end: 1.5),
+            SpokenWord(text: "who", start: 1.6, end: 1.8),
+            SpokenWord(text: "built", start: 1.9, end: 2.2),
+            SpokenWord(text: "an", start: 2.3, end: 2.4),
+            SpokenWord(text: "app", start: 2.5, end: 2.8),
+            SpokenWord(text: "together.", start: 2.9, end: 3.5)
+        ]
+        vm.configureForPreview(
+            phase: phase,
+            elapsed: phase == .listening ? 45 : 12,
+            words: sampleWords
+        )
+        self.model = vm
+    }
+
+    var body: some View {
+        SessionView(
+            story: story,
+            challenge: "Tell the story with more vivid descriptions.",
+            attempt: 1,
+            priming: { .none },
+            previous: nil,
+            isTelling: .constant(true),
+            viewModel: model,
+            onAbandon: {},
+            onFinish: { _ in }
+        )
     }
 }
