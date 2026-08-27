@@ -46,8 +46,8 @@ struct TellFlowView: View {
                     Button {
                         showHistory = true
                     } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 22, weight: .semibold))
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
