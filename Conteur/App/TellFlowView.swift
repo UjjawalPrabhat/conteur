@@ -41,7 +41,7 @@ struct TellFlowView: View {
                     .animation(.easeInOut(duration: 0.35), value: stage)
                     .transition(.opacity)
             }
-            .overlay(alignment: .topLeading) {
+            .overlay(alignment: .topTrailing) {
                 if stage == .choosing {
                     Button {
                         showHistory = true
@@ -53,7 +53,7 @@ struct TellFlowView: View {
                             .contentShape(Rectangle())
                     }
                     .padding(.top, 8)
-                    .padding(.leading, 16)
+                    .padding(.trailing, 16)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
