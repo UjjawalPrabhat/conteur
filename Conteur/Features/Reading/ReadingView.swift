@@ -53,10 +53,11 @@ struct ReadingView: View {
                             }) {
                                 Image(systemName: "minus")
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255).opacity(fontSize > minFontSize ? 1 : 0.3))
                                     .frame(width: 32, height: 32)
                             }
-                            
+                            .disabled(fontSize <= minFontSize)
+
                             Text("\(Int(fontSize))")
                                 .textStyle(.stats)
                                 .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
@@ -69,9 +70,10 @@ struct ReadingView: View {
                             }) {
                                 Image(systemName: "plus")
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255))
+                                    .foregroundStyle(Color(red: 237/255, green: 127/255, blue: 51/255).opacity(fontSize < maxFontSize ? 1 : 0.3))
                                     .frame(width: 32, height: 32)
                             }
+                            .disabled(fontSize >= maxFontSize)
                         }
                         .padding(.horizontal, 4)
                         .padding(.vertical, 4)
